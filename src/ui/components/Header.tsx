@@ -7,6 +7,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
+import { MenuIcon, PlusIcon, SlidersIcon } from './icons';
 
 interface HeaderProps {
   onOpenHistory?: () => void;
@@ -24,15 +25,11 @@ export const Header: React.FC<HeaderProps> = ({
       <TouchableOpacity
         style={styles.iconButton}
         onPress={onOpenHistory}
+        activeOpacity={0.7}
         accessibilityLabel="View conversation history"
         accessibilityRole="button"
       >
-        {/* Minimal hamburger / list lines */}
-        <View style={styles.historyIcon}>
-          <View style={[styles.historyBar, { width: 18 }]} />
-          <View style={[styles.historyBar, { width: 14 }]} />
-          <View style={[styles.historyBar, { width: 10 }]} />
-        </View>
+        <MenuIcon size={16} color={colors.textSecondary} />
       </TouchableOpacity>
 
       <View style={styles.titleContainer}>
@@ -43,25 +40,21 @@ export const Header: React.FC<HeaderProps> = ({
         <TouchableOpacity
           style={styles.iconButton}
           onPress={onNewConversation}
+          activeOpacity={0.7}
           accessibilityLabel="New conversation"
           accessibilityRole="button"
         >
-          {/* Plus icon */}
-          <Text style={styles.plusIcon}>+</Text>
+          <PlusIcon size={16} color={colors.textSecondary} />
         </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.iconButton}
           onPress={onOpenSettings}
+          activeOpacity={0.7}
           accessibilityLabel="Personality settings"
           accessibilityRole="button"
         >
-          {/* Subtle dots/tune icon */}
-          <View style={styles.tuneIcon}>
-            <View style={styles.tuneDot} />
-            <View style={styles.tuneDot} />
-            <View style={styles.tuneDot} />
-          </View>
+          <SlidersIcon size={15} color={colors.textSecondary} />
         </TouchableOpacity>
       </View>
     </View>
@@ -70,7 +63,7 @@ export const Header: React.FC<HeaderProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    height: 56,
+    height: 54,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -86,6 +79,9 @@ const styles = StyleSheet.create({
   title: {
     ...typography.brandTitle,
     color: colors.textPrimary,
+    fontSize: 14,
+    letterSpacing: 4,
+    fontWeight: '600',
   },
   actions: {
     flexDirection: 'row',
@@ -93,40 +89,13 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   iconButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.surfaceBorder,
-  },
-  historyIcon: {
-    width: 18,
-    height: 14,
-    justifyContent: 'space-between',
-  },
-  historyBar: {
-    height: 2,
-    backgroundColor: colors.textSecondary,
-    borderRadius: 1,
-  },
-  plusIcon: {
-    fontSize: 20,
-    color: colors.textSecondary,
-    lineHeight: 22,
-    fontWeight: '300',
-  },
-  tuneIcon: {
-    flexDirection: 'column',
-    gap: 3,
-    alignItems: 'center',
-  },
-  tuneDot: {
-    width: 3.5,
-    height: 3.5,
-    borderRadius: 2,
-    backgroundColor: colors.textSecondary,
   },
 });

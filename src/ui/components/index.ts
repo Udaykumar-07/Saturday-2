@@ -6,3 +6,9 @@ export * from './ErrorDisplay';
 export * from './EmptyState';
 export * from './ConversationListModal';
 export * from './PersonalityModal';
+export * from './ActionConfirmation';
+export * from './ActionStatus';
+export * from './AuthPrompt';
+export * from './IntegrationCard';
+export * from './LocalAISettingsSection';
+

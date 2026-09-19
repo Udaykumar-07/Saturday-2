@@ -8,4 +8,3 @@ import { HomeScreen } from '../src/ui/screens/HomeScreen';
 export default function IndexPage() {
   return <HomeScreen />;
 }
-65464

@@ -3,6 +3,19 @@
  */
 
 export { AIProviderRegistry } from './AIProviderRegistry';
-export { LocalAIProvider } from './LocalAIProvider';
+export { LocalAIProvider, type LocalAIProviderConfig } from './LocalAIProvider';
 export { MockAIProvider } from './MockAIProvider';
 export { FailingAIProvider } from './FailingAIProvider';
+export {
+  LocalAIModelRegistry,
+  type LocalModelInfo,
+  LOCAL_MODELS,
+  DEFAULT_LOCAL_MODEL_ID,
+} from './LocalAIModelRegistry';
+export {
+  LocalInferenceEngine,
+  type InferenceMode,
+  type InferenceResult,
+} from './LocalInferenceEngine';
+
+

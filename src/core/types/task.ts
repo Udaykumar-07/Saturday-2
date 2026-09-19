@@ -6,12 +6,20 @@
 export type TaskType =
   | 'CHAT'
   | 'QUESTION'
+  | 'KNOWLEDGE_QUERY'
+  | 'MEMORY_STORE'
+  | 'MEMORY_QUERY'
+  | 'MEMORY_UPDATE'
+  | 'MEMORY_DELETE'
+  | 'MEMORY_LIST'
   | 'REASONING'
   | 'SEARCH'
   | 'PHONE_ACTION'
   | 'APP_ACTION'
   | 'API_TASK'
+  | 'EXTERNAL_API'
   | 'AGENT_TASK'
+  | 'EXTERNAL_AI'
   | 'MULTI_STEP_TASK'
   | 'UNKNOWN';
 

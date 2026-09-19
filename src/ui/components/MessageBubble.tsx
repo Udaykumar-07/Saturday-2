@@ -10,33 +10,48 @@ import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 import { formatTimeOnly } from '../../utils/date';
 
+import { AuthPrompt } from './AuthPrompt';
+
 interface MessageBubbleProps {
   message: Message;
+  onAuthenticate?: (serviceId: string) => Promise<void>;
 }
 
-export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
+export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onAuthenticate }) => {
   const isUser = message.role === 'user';
 
-  return (
-    <View style={[styles.container, isUser ? styles.userContainer : styles.assistantContainer]}>
-      {!isUser && (
-        <View style={styles.assistantHeader}>
-          <Text style={styles.assistantLabel}>SATURDAY</Text>
+  if (isUser) {
+    return (
+      <View style={[styles.container, styles.userContainer]}>
+        <View style={styles.userBubble}>
+          <Text style={styles.userContent}>{message.content}</Text>
         </View>
-      )}
-
-      <View
-        style={[
-          styles.bubble,
-          isUser ? styles.userBubble : styles.assistantBubble,
-        ]}
-      >
-        <Text style={[styles.content, isUser ? styles.userContent : styles.assistantContent]}>
-          {message.content}
+        <Text style={styles.userTimestamp}>
+          {formatTimeOnly(message.timestamp)}
         </Text>
       </View>
+    );
+  }
 
-      <Text style={[styles.timestamp, isUser ? styles.userTimestamp : styles.assistantTimestamp]}>
+  return (
+    <View style={[styles.container, styles.assistantContainer]}>
+      <View style={styles.assistantHeader}>
+        <View style={styles.assistantDot} />
+        <Text style={styles.assistantLabel}>SATURDAY</Text>
+      </View>
+
+      <View style={styles.assistantBody}>
+        <Text style={styles.assistantContent}>{message.content}</Text>
+        {Boolean(message.metadata?.requiresAuth) && Boolean(onAuthenticate) && (
+          <AuthPrompt
+            serviceId={(message.metadata?.serviceId as string) || 'gmail'}
+            description={(message.metadata?.prompt as string) || undefined}
+            onAuthenticate={onAuthenticate!}
+          />
+        )}
+      </View>
+
+      <Text style={styles.assistantTimestamp}>
         {formatTimeOnly(message.timestamp)}
       </Text>
     </View>
@@ -45,7 +60,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
 
 const styles = StyleSheet.create({
   container: {
-    marginVertical: 10,
+    marginVertical: 8,
     paddingHorizontal: 16,
     width: '100%',
   },
@@ -54,55 +69,66 @@ const styles = StyleSheet.create({
   },
   assistantContainer: {
     alignItems: 'flex-start',
+    paddingRight: 24,
   },
   assistantHeader: {
-    marginBottom: 6,
+    marginBottom: 8,
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 6,
+  },
+  assistantDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: colors.accent,
   },
   assistantLabel: {
     ...typography.micro,
     color: colors.textTertiary,
+    fontSize: 11,
     letterSpacing: 2,
-  },
-  bubble: {
-    maxWidth: '85%',
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    fontWeight: '600',
   },
   userBubble: {
+    maxWidth: '82%',
+    borderRadius: 18,
+    borderBottomRightRadius: 4,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     backgroundColor: colors.userBubble,
     borderWidth: 1,
     borderColor: colors.userBubbleBorder,
-    borderBottomRightRadius: 4,
   },
-  assistantBubble: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.surfaceBorder,
-    borderBottomLeftRadius: 4,
-  },
-  content: {
-    ...typography.body,
+  assistantBody: {
+    width: '100%',
+    paddingLeft: 2,
   },
   userContent: {
+    ...typography.body,
     color: colors.textPrimary,
+    fontSize: 15,
+    lineHeight: 22,
   },
   assistantContent: {
+    ...typography.body,
     color: colors.textPrimary,
+    fontSize: 15,
     lineHeight: 24,
+    letterSpacing: 0.2,
   },
-  timestamp: {
+  userTimestamp: {
     ...typography.caption,
     fontSize: 10,
     color: colors.textTertiary,
     marginTop: 4,
-  },
-  userTimestamp: {
     marginRight: 4,
   },
   assistantTimestamp: {
-    marginLeft: 4,
+    ...typography.caption,
+    fontSize: 10,
+    color: colors.textTertiary,
+    marginTop: 6,
+    marginLeft: 2,
   },
 });

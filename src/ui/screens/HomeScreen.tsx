@@ -10,11 +10,13 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
-  SafeAreaView,
   StatusBar,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useConversation } from '../../hooks/useConversation';
 import { usePersonality } from '../../hooks/usePersonality';
+import { useActions } from '../../hooks/useActions';
+import { useIntegrations } from '../../hooks/useIntegrations';
 import { colors } from '../theme/colors';
 import {
   Header,
@@ -25,7 +27,9 @@ import {
   EmptyState,
   ConversationListModal,
   PersonalityModal,
+  ActionConfirmation,
 } from '../components';
+import { IntegrationsScreen } from './IntegrationsScreen';
 
 export const HomeScreen: React.FC = () => {
   const {
@@ -42,9 +46,12 @@ export const HomeScreen: React.FC = () => {
   } = useConversation();
 
   const { personality, updatePersonality, resetPersonality } = usePersonality();
+  const { pendingAction, confirmAction, denyAction } = useActions();
+  const { connectService } = useIntegrations();
 
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isIntegrationsOpen, setIsIntegrationsOpen] = useState(false);
 
   const flatListRef = useRef<FlatList>(null);
 
@@ -57,14 +64,16 @@ export const HomeScreen: React.FC = () => {
     }
   }, [conversation?.messages?.length, isSending]);
 
+  const insets = useSafeAreaInsets();
+
   const messages = conversation?.messages || [];
   const hasMessages = messages.length > 0;
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar barStyle="light-content" backgroundColor={colors.background} />
       <KeyboardAvoidingView
-        style={styles.container}
+        style={styles.keyboardContainer}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         {/* Minimal Header */}
@@ -90,7 +99,15 @@ export const HomeScreen: React.FC = () => {
               ref={flatListRef}
               data={messages}
               keyExtractor={(item) => item.id}
-              renderItem={({ item }) => <MessageBubble message={item} />}
+              renderItem={({ item }) => (
+                <MessageBubble
+                  message={item}
+                  onAuthenticate={async (sId) => {
+                    await connectService(sId);
+                    await sendMessage('Show my latest emails');
+                  }}
+                />
+              )}
               contentContainerStyle={styles.messagesList}
               ListFooterComponent={isSending ? <LoadingIndicator /> : null}
             />
@@ -123,20 +140,34 @@ export const HomeScreen: React.FC = () => {
           onClose={() => setIsSettingsOpen(false)}
           onSave={updatePersonality}
           onReset={resetPersonality}
+          onOpenIntegrations={() => setIsIntegrationsOpen(true)}
+        />
+
+        {/* Action Confirmation Modal */}
+        <ActionConfirmation
+          action={pendingAction}
+          visible={pendingAction !== null}
+          onAllow={() => pendingAction && confirmAction(pendingAction.id)}
+          onDeny={() => pendingAction && denyAction(pendingAction.id)}
+        />
+
+        {/* Integrations & Privacy Modal */}
+        <IntegrationsScreen
+          visible={isIntegrationsOpen}
+          onClose={() => setIsIntegrationsOpen(false)}
         />
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  keyboardContainer: {
+    flex: 1,
   },
   content: {
     flex: 1,

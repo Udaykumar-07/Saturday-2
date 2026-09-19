@@ -45,7 +45,7 @@ export class AIRouter {
     }
 
     // No providers available
-    throw new AIProviderUnavailableError(
+    throw new RoutingError(
       'No AI provider is currently available. Please configure a local model or another provider.'
     );
   }

@@ -1,21 +1,16 @@
-/**
- * Chat input component.
- * Text input, microphone button placeholder, send button.
- */
-
 import React, { useState } from 'react';
 import {
   View,
   TextInput,
   TouchableOpacity,
-  Text,
   StyleSheet,
   ActivityIndicator,
-  Platform,
   Alert,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
+import { MicIcon, ArrowUpIcon } from './icons';
 
 interface ChatInputProps {
   onSend: (message: string) => void;
@@ -29,6 +24,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   placeholder = 'What do you want to get done?',
 }) => {
   const [text, setText] = useState('');
+  const insets = useSafeAreaInsets();
 
   const handleSend = () => {
     const trimmed = text.trim();
@@ -49,7 +45,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const canSend = text.trim().length > 0 && !isSending;
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingBottom: Math.max(insets.bottom, 12) }]}>
       <View style={styles.inputWrapper}>
         <TextInput
           style={styles.input}
@@ -67,13 +63,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         <TouchableOpacity
           style={styles.micButton}
           onPress={handleMicPress}
+          activeOpacity={0.6}
           accessibilityLabel="Voice input (coming soon)"
           accessibilityRole="button"
         >
-          <View style={styles.micIcon}>
-            <View style={styles.micBody} />
-            <View style={styles.micBase} />
-          </View>
+          <MicIcon size={17} color={colors.textTertiary} />
         </TouchableOpacity>
 
         {/* Send button */}
@@ -84,20 +78,17 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           ]}
           onPress={handleSend}
           disabled={!canSend}
+          activeOpacity={0.8}
           accessibilityLabel="Send message"
           accessibilityRole="button"
         >
           {isSending ? (
             <ActivityIndicator size="small" color={colors.buttonPrimaryText} />
           ) : (
-            <Text
-              style={[
-                styles.sendArrow,
-                { color: canSend ? colors.buttonPrimaryText : colors.buttonDisabledText },
-              ]}
-            >
-              ↑
-            </Text>
+            <ArrowUpIcon
+              size={15}
+              color={canSend ? colors.buttonPrimaryText : colors.buttonDisabledText}
+            />
           )}
         </TouchableOpacity>
       </View>
@@ -109,20 +100,19 @@ const styles = StyleSheet.create({
   container: {
     paddingHorizontal: 16,
     paddingTop: 8,
-    paddingBottom: Platform.OS === 'ios' ? 24 : 14,
     backgroundColor: colors.background,
     borderTopWidth: 1,
     borderTopColor: colors.surfaceBorder,
   },
   inputWrapper: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'center',
     backgroundColor: colors.surface,
     borderRadius: 24,
     borderWidth: 1,
     borderColor: colors.surfaceBorder,
     paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingVertical: 4,
     minHeight: 48,
   },
   input: {
@@ -132,7 +122,8 @@ const styles = StyleSheet.create({
     maxHeight: 120,
     paddingTop: 8,
     paddingBottom: 8,
-    marginRight: 8,
+    marginRight: 6,
+    fontSize: 15,
   },
   micButton: {
     width: 32,
@@ -140,26 +131,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 6,
-    marginBottom: 4,
-  },
-  micIcon: {
-    alignItems: 'center',
-  },
-  micBody: {
-    width: 8,
-    height: 12,
-    borderRadius: 4,
-    borderWidth: 1.5,
-    borderColor: colors.textTertiary,
-    backgroundColor: 'transparent',
-  },
-  micBase: {
-    width: 6,
-    height: 2,
-    backgroundColor: colors.textTertiary,
-    marginTop: 2,
-    borderRadius: 1,
+    marginRight: 4,
   },
   sendButton: {
     width: 32,
@@ -167,17 +139,11 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 4,
   },
   sendButtonActive: {
     backgroundColor: colors.buttonPrimary,
   },
   sendButtonDisabled: {
     backgroundColor: colors.buttonDisabled,
-  },
-  sendArrow: {
-    fontSize: 18,
-    fontWeight: '700',
-    lineHeight: 20,
   },
 });

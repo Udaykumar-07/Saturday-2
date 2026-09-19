@@ -57,7 +57,7 @@ export class MockAIProvider implements AIProvider {
   private generateMockResponse(input: string): string {
     const lower = input.toLowerCase();
 
-    if (lower.includes('hello') || lower.includes('hi')) {
+    if (lower.includes('hello') || lower.includes('hi') || lower.includes('hey')) {
       return "Hello! I'm Saturday, your personal AI assistant. I'm currently running in development mode with a mock provider. Once a real AI model is configured, I'll be able to help you with much more.";
     }
 

@@ -12,13 +12,27 @@
     "isolatedModules": true,
     "noEmit": true,
     "paths": {
-      "@/*": ["./src/*"],
-      "@/core/*": ["./src/core/*"],
-      "@/storage/*": ["./src/storage/*"],
-      "@/services/*": ["./src/services/*"],
-      "@/hooks/*": ["./src/hooks/*"],
-      "@/ui/*": ["./src/ui/*"],
-      "@/utils/*": ["./src/utils/*"]
+      "@/*": [
+        "./src/*"
+      ],
+      "@/core/*": [
+        "./src/core/*"
+      ],
+      "@/storage/*": [
+        "./src/storage/*"
+      ],
+      "@/services/*": [
+        "./src/services/*"
+      ],
+      "@/hooks/*": [
+        "./src/hooks/*"
+      ],
+      "@/ui/*": [
+        "./src/ui/*"
+      ],
+      "@/utils/*": [
+        "./src/utils/*"
+      ]
     },
     "baseUrl": "."
   },
@@ -26,11 +40,10 @@
     "**/*.ts",
     "**/*.tsx",
     "app/**/*.ts",
-    "app/**/*.tsx",
-    ".expo/types/**/*.ts",
-    "expo-env.d.ts"
+    "app/**/*.tsx"
   ],
   "exclude": [
     "node_modules"
-  ]
+  ],
+  "extends": "expo/tsconfig.base"
 }

@@ -3,7 +3,7 @@
  * Memories are categorized, confidence-scored, and searchable.
  */
 
-import { Memory, MemoryCategory, MemorySearchOptions } from '../core/types/memory';
+import { Memory, MemoryCategory, MemorySearchOptions, MemoryType } from '../core/types/memory';
 import { MemoryRepository } from '../storage/MemoryRepository';
 
 export class MemoryService {
@@ -14,21 +14,83 @@ export class MemoryService {
     category: MemoryCategory,
     key: string,
     value: string,
-    confidence = 0.8
+    confidence = 0.8,
+    type?: MemoryType,
+    source?: string
   ): Promise<Memory> {
     const now = Date.now();
     const memory: Memory = {
       id: `mem_${now}_${Math.random().toString(36).substring(2, 9)}`,
       category,
+      type,
       key,
       value,
       confidence,
+      source,
       createdAt: now,
       updatedAt: now,
     };
 
     await this.repository.save(memory);
     return memory;
+  }
+
+  /**
+   * Set a memory value by key.
+   * If a memory with this key already exists, updates it (no duplicates).
+   * If not, adds a new one.
+   */
+  async setKey(
+    key: string,
+    value: string,
+    category: MemoryCategory = 'facts',
+    type?: MemoryType,
+    confidence = 1.0,
+    source = 'user_stated'
+  ): Promise<Memory> {
+    const existing = await this.getByKey(key);
+    if (existing) {
+      const updated: Memory = {
+        ...existing,
+        value,
+        category,
+        type: type || existing.type,
+        confidence,
+        source: source || existing.source,
+        updatedAt: Date.now(),
+      };
+      await this.repository.save(updated);
+      return updated;
+    }
+
+    return this.add(category, key, value, confidence, type, source);
+  }
+
+  /**
+   * Get a memory by exact key.
+   */
+  async getByKey(key: string): Promise<Memory | null> {
+    const all = await this.repository.search();
+    const matching = all.filter((m) => m.key.toLowerCase() === key.toLowerCase());
+    if (matching.length === 0) return null;
+
+    // Pick most recently updated with highest confidence
+    matching.sort((a, b) => b.updatedAt - a.updatedAt);
+    return matching[0];
+  }
+
+  /**
+   * Delete memories matching an exact key.
+   */
+  async deleteByKey(key: string): Promise<boolean> {
+    const all = await this.repository.search();
+    const matching = all.filter((m) => m.key.toLowerCase() === key.toLowerCase());
+    if (matching.length === 0) return false;
+
+    for (const mem of matching) {
+      await this.repository.delete(mem.id);
+    }
+    return true;
   }
 
   /** Update an existing memory. */

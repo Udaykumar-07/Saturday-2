@@ -10,6 +10,11 @@ import { LocalAIProvider } from '../src/core/ai/LocalAIProvider';
 import { FailingAIProvider } from '../src/core/ai/FailingAIProvider';
 import { StorageAdapter } from '../src/storage/StorageAdapter';
 import { AIProvider, AIRequest, AIResponse, IntelligenceCapability } from '../src/core/types/ai';
+import { ActionEngine } from '../src/core/actions/ActionEngine';
+import { CapabilityRegistry } from '../src/core/actions/CapabilityRegistry';
+import { registerAllCapabilities } from '../src/capabilities';
+import { ActionService } from '../src/services/ActionService';
+import { Platform } from 'react-native';
 
 class MemoryStorageAdapter implements StorageAdapter {
   private store: Map<string, string> = new Map();
@@ -121,4 +126,73 @@ describe('ConversationService Orchestration', () => {
     expect(assistantMessage.role).toBe('assistant');
     expect(assistantMessage.content).toBeDefined();
   });
+
+  test('executes "Search Imagine Dragons on YouTube" via ActionEngine instead of mock AI', async () => {
+    const origPlatform = Platform.OS;
+    (Platform as any).OS = 'android';
+    try {
+      const capRegistry = new CapabilityRegistry();
+      registerAllCapabilities(capRegistry);
+      const actionEngine = new ActionEngine(capRegistry);
+      const actionService = new ActionService(actionEngine);
+
+      const actionAwareService = new ConversationService(
+        convRepo,
+        registry,
+        router,
+        contextService,
+        persService,
+        undefined,
+        actionService
+      );
+
+      const conv = await actionAwareService.create();
+      const { assistantMessage } = await actionAwareService.sendMessage(
+        conv.id,
+        'Search Imagine Dragons on YouTube'
+      );
+
+      expect(assistantMessage.role).toBe('assistant');
+      expect(assistantMessage.metadata?.providerId).toBe('action-engine');
+      expect(assistantMessage.content).toContain('Search Imagine Dragons on YouTube');
+      expect(assistantMessage.content).not.toContain('mock AI provider');
+    } finally {
+      (Platform as any).OS = origPlatform;
+    }
+  });
+
+  test('executes "Search quantum computing on Chrome" via ActionEngine instead of mock AI', async () => {
+    const origPlatform = Platform.OS;
+    (Platform as any).OS = 'android';
+    try {
+      const capRegistry = new CapabilityRegistry();
+      registerAllCapabilities(capRegistry);
+      const actionEngine = new ActionEngine(capRegistry);
+      const actionService = new ActionService(actionEngine);
+
+      const actionAwareService = new ConversationService(
+        convRepo,
+        registry,
+        router,
+        contextService,
+        persService,
+        undefined,
+        actionService
+      );
+
+      const conv = await actionAwareService.create();
+      const { assistantMessage } = await actionAwareService.sendMessage(
+        conv.id,
+        'Search quantum computing on Chrome'
+      );
+
+      expect(assistantMessage.role).toBe('assistant');
+      expect(assistantMessage.metadata?.providerId).toBe('action-engine');
+      expect(assistantMessage.content).toContain('Search quantum computing on Chrome');
+      expect(assistantMessage.content).not.toContain('mock AI provider');
+    } finally {
+      (Platform as any).OS = origPlatform;
+    }
+  });
 });
+

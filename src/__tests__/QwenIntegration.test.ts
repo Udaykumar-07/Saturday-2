@@ -1,0 +1,218 @@
+import { ConversationService } from '../services/ConversationService';
+import { ConversationRepository } from '../storage/ConversationRepository';
+import { MemoryRepository } from '../storage/MemoryRepository';
+import { PersonalityRepository } from '../storage/PersonalityRepository';
+import { MemoryService } from '../services/MemoryService';
+import { PersonalityService } from '../services/PersonalityService';
+import { AIProviderRegistry } from '../core/ai/AIProviderRegistry';
+import { AIRouter } from '../core/routing/AIRouter';
+import { ContextService } from '../core/context/ContextService';
+import { TaskUnderstandingService } from '../core/routing/TaskUnderstandingService';
+import { ActionEngine } from '../core/actions/ActionEngine';
+import { CapabilityRegistry } from '../core/actions/CapabilityRegistry';
+import { registerAllCapabilities } from '../capabilities';
+import { ActionService } from '../services/ActionService';
+import { StorageAdapter } from '../storage/StorageAdapter';
+import { LocalAIProvider } from '../core/ai/LocalAIProvider';
+import { MemoryContextProvider } from '../core/context/MemoryContextProvider';
+import { ExternalProviderRegistry } from '../core/external/providers/ExternalProviderRegistry';
+import { AgentRegistry } from '../core/external/agents/AgentRegistry';
+import { IntelligenceRouter } from '../core/external/routing/IntelligenceRouter';
+import { TaskRequirementsAnalyzer } from '../core/external/routing/TaskRequirementsAnalyzer';
+import { Platform } from 'react-native';
+
+class TestStorageAdapter implements StorageAdapter {
+  private store = new Map<string, string>();
+  async get(k: string) { return this.store.get(k) ?? null; }
+  async set(k: string, v: string) { this.store.set(k, v); }
+  async remove(k: string) { this.store.delete(k); }
+  async getAllKeys(prefix?: string) {
+    const keys = Array.from(this.store.keys());
+    return prefix ? keys.filter((k) => k.startsWith(prefix)) : keys;
+  }
+  async multiGet(keys: string[]) {
+    const res: Record<string, string | null> = {};
+    for (const k of keys) res[k] = this.store.get(k) ?? null;
+    return res;
+  }
+  async multiSet(entries: Array<[string, string]>) {
+    for (const [k, v] of entries) this.store.set(k, v);
+  }
+  async clear() { this.store.clear(); }
+}
+
+describe('Qwen Full Integration & Section 23 Test Matrix (A through K)', () => {
+  let storage: TestStorageAdapter;
+  let convRepo: ConversationRepository;
+  let memRepo: MemoryRepository;
+  let persRepo: PersonalityRepository;
+  let memoryService: MemoryService;
+  let personalityService: PersonalityService;
+  let aiRegistry: AIProviderRegistry;
+  let localProvider: LocalAIProvider;
+  let router: AIRouter;
+  let contextService: ContextService;
+  let taskUnderstanding: TaskUnderstandingService;
+  let capabilityRegistry: CapabilityRegistry;
+  let actionEngine: ActionEngine;
+  let actionService: ActionService;
+  let service: ConversationService;
+  let convId: string;
+  let consoleSpy: jest.SpyInstance;
+
+  beforeEach(async () => {
+    Platform.OS = 'android';
+    consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+    storage = new TestStorageAdapter();
+    convRepo = new ConversationRepository(storage);
+    memRepo = new MemoryRepository(storage);
+    persRepo = new PersonalityRepository(storage);
+
+    memoryService = new MemoryService(memRepo);
+    personalityService = new PersonalityService(persRepo);
+    taskUnderstanding = new TaskUnderstandingService();
+
+    localProvider = new LocalAIProvider({ enabled: true });
+    await localProvider.initializeQwen();
+
+    aiRegistry = new AIProviderRegistry();
+    aiRegistry.register(localProvider);
+    aiRegistry.register(localProvider.getQwenProvider());
+
+    router = new AIRouter(aiRegistry);
+
+    contextService = new ContextService();
+    contextService.registerProvider(new MemoryContextProvider(memoryService));
+
+    capabilityRegistry = new CapabilityRegistry();
+    registerAllCapabilities(capabilityRegistry);
+    actionEngine = new ActionEngine(capabilityRegistry);
+    actionService = new ActionService(actionEngine);
+
+    service = new ConversationService(
+      convRepo,
+      aiRegistry,
+      router,
+      contextService,
+      personalityService,
+      taskUnderstanding,
+      actionService,
+      undefined,
+      memoryService
+    );
+
+    const conv = await service.create('Qwen Test Matrix');
+    convId = conv.id;
+  });
+
+  afterEach(() => {
+    consoleSpy.mockRestore();
+  });
+
+  test('TEST A: "Hello" produces Qwen conversational response with structured logs', async () => {
+    consoleSpy.mockClear();
+    const result = await service.sendMessage(convId, 'Hello');
+
+    expect(result.assistantMessage.content).toContain('Qwen');
+    expect(result.assistantMessage.content).toContain('Saturday');
+
+    const logs = consoleSpy.mock.calls.map((c) => c[0]).join('\n');
+    expect(logs).toContain('QWEN_REQUEST');
+    expect(logs).toContain('QWEN_RESPONSE');
+  });
+
+  test('TEST B: "What is 2 + 2?" returns 4 generated by Qwen', async () => {
+    const result = await service.sendMessage(convId, 'What is 2 + 2?');
+    expect(result.assistantMessage.content).toBe('4');
+  });
+
+  test('TEST C: "What are mitochondria?" produces biology explanation without Chrome search suggestion', async () => {
+    const result = await service.sendMessage(convId, 'What are mitochondria?');
+
+    expect(result.assistantMessage.content.toLowerCase()).toContain('powerhouse');
+    expect(result.assistantMessage.content).toContain('ATP');
+    expect(result.assistantMessage.content).not.toContain('Search What mitochondria on Chrome');
+    expect(result.assistantMessage.content).not.toContain('I don\'t have a detailed answer');
+  });
+
+  test('TEST D: "Which model are you?" reports actual runtime model identity', async () => {
+    const result = await service.sendMessage(convId, 'Which model are you');
+
+    expect(result.assistantMessage.content).toContain('Qwen 2.5 0.5B Instruct');
+    expect(result.assistantMessage.content).toContain('locally on your device');
+    expect(result.assistantMessage.metadata?.providerId).toBe('qwen-local');
+  });
+
+  test('TEST E: "My name is Uday." extracts and persists durable fact', async () => {
+    const result = await service.sendMessage(convId, 'My name is Uday.');
+
+    expect(result.assistantMessage.content).toContain('Uday');
+    expect(result.assistantMessage.metadata?.providerId).toBe('local-memory');
+
+    const stored = await memoryService.getByKey('user.name');
+    expect(stored?.value).toBe('Uday');
+  });
+
+  test('TEST F: "What is my name?" retrieves name from LOCAL_MEMORY', async () => {
+    await service.sendMessage(convId, 'My name is Uday.');
+    const result = await service.sendMessage(convId, 'What is my name?');
+
+    expect(result.assistantMessage.content).toBe('Your name is Uday.');
+    expect(result.assistantMessage.metadata?.providerId).toBe('local-memory');
+  });
+
+  test('TEST G: "I like biblical movies." stores preference in memory', async () => {
+    const result = await service.sendMessage(convId, 'I like biblical movies.');
+
+    expect(result.assistantMessage.content.toLowerCase()).toContain('biblical movies');
+    expect(result.assistantMessage.metadata?.providerId).toBe('local-memory');
+
+    const stored = await memoryService.getByKey('user.preference.movie');
+    expect(stored?.value).toBe('biblical movies');
+  });
+
+  test('TEST H: "What kind of movies do I like?" retrieves from LOCAL_MEMORY', async () => {
+    await service.sendMessage(convId, 'I like biblical movies.');
+    const result = await service.sendMessage(convId, 'What kind of movies do I like?');
+
+    expect(result.assistantMessage.content).toBe('You like biblical movies.');
+    expect(result.assistantMessage.metadata?.providerId).toBe('local-memory');
+  });
+
+  test('TEST I: "Open YouTube" dispatches to Android ActionEngine, not Qwen directly', async () => {
+    const result = await service.sendMessage(convId, 'Open YouTube');
+
+    expect(result.assistantMessage.metadata?.providerId).toBe('action-engine');
+    expect(result.assistantMessage.content).toContain('Open YouTube');
+  });
+
+  test('TEST J: "Open YouTube and search for Imagine Dragons" executes via ActionEngine', async () => {
+    const result = await service.sendMessage(
+      convId,
+      'Open YouTube and search for Imagine Dragons'
+    );
+
+    expect(result.assistantMessage.metadata?.providerId).toBe('action-engine');
+  });
+
+  test('TEST K: "What is the latest AI news?" routes to fresh-information capable provider', async () => {
+    const analyzer = new TaskRequirementsAnalyzer();
+    const requirements = analyzer.analyze('What is the latest AI news?');
+
+    expect(requirements.freshInformationRequired).toBe(true);
+    expect(requirements.requiresCurrentData).toBe(true);
+
+    const extRegistry = new ExternalProviderRegistry();
+    const agentRegistry = new AgentRegistry();
+    const intelligenceRouter = new IntelligenceRouter(
+      analyzer,
+      extRegistry,
+      agentRegistry,
+      localProvider
+    );
+
+    const decision = await intelligenceRouter.route('What is the latest AI news?');
+    // Fresh news cannot be resolved on local offline model without current data
+    expect(decision.target).not.toBe('LOCAL');
+  });
+});

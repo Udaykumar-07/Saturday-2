@@ -30,6 +30,7 @@ interface PersonalityModalProps {
   onClose: () => void;
   onSave: (updates: Partial<PersonalityProfile>) => Promise<void>;
   onReset: () => Promise<void>;
+  onOpenIntegrations?: () => void;
 }
 
 export const PersonalityModal: React.FC<PersonalityModalProps> = ({
@@ -38,6 +39,7 @@ export const PersonalityModal: React.FC<PersonalityModalProps> = ({
   onClose,
   onSave,
   onReset,
+  onOpenIntegrations,
 }) => {
   const [verbosity, setVerbosity] = useState<VerbosityLevel>(personality.verbosity);
   const [tone, setTone] = useState<ToneLevel>(personality.tone);
@@ -173,6 +175,19 @@ export const PersonalityModal: React.FC<PersonalityModalProps> = ({
                 </View>
               </View>
 
+              {/* Local AI & Integrations Navigation */}
+              {onOpenIntegrations && (
+                <TouchableOpacity
+                  style={styles.integrationsNavButton}
+                  onPress={() => {
+                    onClose();
+                    onOpenIntegrations();
+                  }}
+                >
+                  <Text style={styles.integrationsNavText}>⚡ Local AI Models & Integrations →</Text>
+                </TouchableOpacity>
+              )}
+
               {/* Reset to Default */}
               <TouchableOpacity style={styles.resetButton} onPress={handleReset}>
                 <Text style={styles.resetText}>Reset to Default</Text>
@@ -293,6 +308,20 @@ const styles = StyleSheet.create({
     color: colors.textTertiary,
     textDecorationLine: 'underline',
   },
+  integrationsNavButton: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.surfaceBorder,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  integrationsNavText: {
+    ...typography.captionMedium,
+    color: colors.textPrimary,
+    fontWeight: '600',
+  },
   footer: {
     paddingHorizontal: 20,
     paddingTop: 8,
@@ -309,3 +338,4 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 });
+

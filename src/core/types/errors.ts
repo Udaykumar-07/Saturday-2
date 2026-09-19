@@ -66,3 +66,102 @@ export class TimeoutError extends SaturdayError {
     this.name = 'TimeoutError';
   }
 }
+
+// --- Action Engine Errors (Phase 2) ---
+
+export class ActionValidationError extends SaturdayError {
+  constructor(message: string) {
+    super(message, 'ACTION_VALIDATION_ERROR', true);
+    this.name = 'ActionValidationError';
+  }
+}
+
+export class ActionExecutionError extends SaturdayError {
+  constructor(message: string, recoverable = true) {
+    super(message, 'ACTION_EXECUTION_ERROR', recoverable);
+    this.name = 'ActionExecutionError';
+  }
+}
+
+export class ActionPermissionError extends SaturdayError {
+  constructor(message = 'Permission denied for this action.') {
+    super(message, 'ACTION_PERMISSION_DENIED', true);
+    this.name = 'ActionPermissionError';
+  }
+}
+
+export class CapabilityUnavailableError extends SaturdayError {
+  constructor(capabilityId: string) {
+    super(
+      `Capability "${capabilityId}" is not available on this device.`,
+      'CAPABILITY_UNAVAILABLE',
+      true
+    );
+    this.name = 'CapabilityUnavailableError';
+  }
+}
+
+// --- External Intelligence & Auth Errors (Phase 3) ---
+
+export class AuthenticationRequiredError extends SaturdayError {
+  readonly serviceId: string;
+
+  constructor(serviceId: string, message?: string) {
+    super(
+      message || `Authentication required for service "${serviceId}".`,
+      'AUTHENTICATION_REQUIRED',
+      true
+    );
+    this.name = 'AuthenticationRequiredError';
+    this.serviceId = serviceId;
+  }
+}
+
+export class AuthenticationExpiredError extends SaturdayError {
+  readonly serviceId: string;
+
+  constructor(serviceId: string, message?: string) {
+    super(
+      message || `Authentication session expired for service "${serviceId}".`,
+      'AUTHENTICATION_EXPIRED',
+      true
+    );
+    this.name = 'AuthenticationExpiredError';
+    this.serviceId = serviceId;
+  }
+}
+
+export class DataBoundaryError extends SaturdayError {
+  readonly reason: string;
+
+  constructor(reason: string) {
+    super(
+      `Data boundary restriction: ${reason}`,
+      'DATA_BOUNDARY_VIOLATION',
+      true
+    );
+    this.name = 'DataBoundaryError';
+    this.reason = reason;
+  }
+}
+
+export class ExternalProviderError extends SaturdayError {
+  readonly providerId?: string;
+
+  constructor(message: string, providerId?: string, recoverable = true) {
+    super(message, 'EXTERNAL_PROVIDER_ERROR', recoverable);
+    this.name = 'ExternalProviderError';
+    this.providerId = providerId;
+  }
+}
+
+export class AgentCommunicationError extends SaturdayError {
+  readonly agentId?: string;
+
+  constructor(message: string, agentId?: string, recoverable = true) {
+    super(message, 'AGENT_COMMUNICATION_ERROR', recoverable);
+    this.name = 'AgentCommunicationError';
+    this.agentId = agentId;
+  }
+}
+
