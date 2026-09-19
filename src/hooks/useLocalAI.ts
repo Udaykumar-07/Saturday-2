@@ -9,7 +9,7 @@ import { InferenceMode } from '../core/ai/LocalInferenceEngine';
 import { LocalAISettings } from '../services/LocalAIService';
 
 export interface UseLocalAIReturn {
-  activeModel: LocalModelInfo;
+  activeModel: LocalModelInfo | null;
   allModels: LocalModelInfo[];
   settings: LocalAISettings;
   isCheckingEndpoint: boolean;
@@ -25,10 +25,10 @@ export function useLocalAI(): UseLocalAIReturn {
   const container = getServices();
   const service = container.localAIService;
 
-  const [activeModel, setActiveModel] = useState<LocalModelInfo>(() => service.getActiveModel());
-  const [allModels] = useState<LocalModelInfo[]>(() => service.getAllModels());
+  const [activeModel, setActiveModel] = useState<LocalModelInfo | null>(null);
+  const [allModels, setAllModels] = useState<LocalModelInfo[]>([]);
   const [settings, setSettings] = useState<LocalAISettings>({
-    activeModelId: activeModel.id,
+    activeModelId: '',
     mode: 'auto',
     endpointUrl: 'http://10.0.2.2:11434',
     enabled: true,
@@ -38,12 +38,23 @@ export function useLocalAI(): UseLocalAIReturn {
 
   useEffect(() => {
     let isMounted = true;
-    service.getSettings().then((s) => {
+    
+    const loadData = async () => {
+      const [s, models] = await Promise.all([
+        service.getSettings(),
+        service.getAllModels(),
+      ]);
+      
       if (isMounted) {
         setSettings(s);
-        setActiveModel(service.getActiveModel());
+        const currentActiveModel = service.getActiveModel();
+        setActiveModel(currentActiveModel || null);
+        setAllModels(models);
       }
-    });
+    };
+    
+    loadData();
+    
     return () => {
       isMounted = false;
     };

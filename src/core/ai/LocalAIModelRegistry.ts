@@ -1,7 +1,11 @@
 /**
  * Local AI Model Registry — catalog of validated on-device and local models.
  * Curated specifically for mobile edge inference performance and resource efficiency.
+ * 
+ * Updated to only show actually downloaded models from Model Management.
  */
+
+import { TFLiteModelManager } from './tflite/TFLiteModelManager';
 
 export interface LocalModelInfo {
   id: string;
@@ -15,15 +19,18 @@ export interface LocalModelInfo {
   recommended?: boolean;
   speedRating: 'Fast' | 'Ultra-Fast' | 'Moderate';
   bestFor: string;
+  localPath?: string; // Path to downloaded model file
+  downloaded: boolean; // Whether model is actually downloaded
 }
 
-export const LOCAL_MODELS: LocalModelInfo[] = [
+// Static model definitions (all available models, regardless of download status)
+export const ALL_LOCAL_MODELS: LocalModelInfo[] = [
   {
-    id: 'qwen2.5:0.5b',
+    id: 'qwen2.5-0.5b-instruct-int4',
     name: 'Qwen 2.5 0.5B Instruct',
     provider: 'Alibaba Cloud',
     parameters: '0.49B',
-    quantization: 'Q4_K_M',
+    quantization: 'INT4',
     diskSize: '394 MB',
     contextWindow: 32768,
     description:
@@ -31,72 +38,124 @@ export const LOCAL_MODELS: LocalModelInfo[] = [
     recommended: true,
     speedRating: 'Fast',
     bestFor: 'Everyday assistance, task extraction, fast phone actions',
+    downloaded: false,
   },
   {
-    id: 'smollm2:360m',
-    name: 'SmolLM2 360M Instruct',
-    provider: 'Hugging Face',
-    parameters: '360M',
-    quantization: 'Q4_K_M',
-    diskSize: '220 MB',
-    contextWindow: 8192,
+    id: 'qwen2.5-1.5b-instruct-int4',
+    name: 'Qwen 2.5 1.5B Instruct',
+    provider: 'Alibaba Cloud',
+    parameters: '1.5B',
+    quantization: 'INT4',
+    diskSize: '934 MB',
+    contextWindow: 32768,
     description:
-      'Ultra-lightweight architecture designed for instant mobile inference with tiny RAM footprint.',
-    recommended: false,
-    speedRating: 'Ultra-Fast',
-    bestFor: 'Low-memory devices, offline quick replies, background classification',
-  },
-  {
-    id: 'llama3.2:1b',
-    name: 'Llama 3.2 1B Instruct',
-    provider: 'Meta',
-    parameters: '1.23B',
-    quantization: 'Q4_K_M',
-    diskSize: '750 MB',
-    contextWindow: 131072,
-    description:
-      "Meta's official edge model built for on-device summarization, reasoning, and tool use.",
+      'Larger Qwen model with enhanced reasoning capabilities for more complex tasks.',
     recommended: false,
     speedRating: 'Moderate',
-    bestFor: 'Detailed explanations, writing, long context understanding',
-  },
-  {
-    id: 'gemma2:2b',
-    name: 'Gemma 2 2B Instruct',
-    provider: 'Google',
-    parameters: '2.6B',
-    quantization: 'Q4_K_M',
-    diskSize: '1.6 GB',
-    contextWindow: 8192,
-    description:
-      'Google lightweight model delivering high quality conversational responses.',
-    recommended: false,
-    speedRating: 'Moderate',
-    bestFor: 'High-end devices with 6GB+ RAM',
+    bestFor: 'Complex reasoning, detailed explanations, advanced task planning',
+    downloaded: false,
   },
 ];
 
-export const DEFAULT_LOCAL_MODEL_ID = 'qwen2.5:0.5b';
+export const DEFAULT_LOCAL_MODEL_ID = 'qwen2.5-0.5b-instruct-int4';
 
 export class LocalAIModelRegistry {
   private models: Map<string, LocalModelInfo> = new Map();
+  private modelManager: TFLiteModelManager;
 
   constructor() {
-    for (const model of LOCAL_MODELS) {
-      this.models.set(model.id, model);
+    this.modelManager = new TFLiteModelManager();
+    
+    // Initialize with static models
+    for (const model of ALL_LOCAL_MODELS) {
+      this.models.set(model.id, { ...model });
     }
   }
 
-  getAll(): LocalModelInfo[] {
+  /**
+   * Get all models, but only return downloaded ones
+   */
+  async getAll(): Promise<LocalModelInfo[]> {
+    await this.refreshDownloadStatus();
+    
+    // Only return downloaded models
+    return Array.from(this.models.values()).filter(m => m.downloaded);
+  }
+
+  /**
+   * Get all models regardless of download status (for admin/management)
+   */
+  getAllIncludingNotDownloaded(): LocalModelInfo[] {
     return Array.from(this.models.values());
   }
 
-  get(id: string): LocalModelInfo | undefined {
-    return this.models.get(id);
+  /**
+   * Refresh download status from TFLiteModelManager
+   */
+  private async refreshDownloadStatus(): Promise<void> {
+    try {
+      await this.modelManager.initialize();
+      const downloadedModels = await this.modelManager.getDownloadedModels();
+      
+      // Update download status and paths
+      for (const [id, model] of this.models) {
+        const downloaded = downloadedModels.find(m => m.modelId === id);
+        if (downloaded && downloaded.status === 'ready') {
+          model.downloaded = true;
+          model.localPath = downloaded.localPath;
+        } else {
+          model.downloaded = false;
+          model.localPath = undefined;
+        }
+      }
+    } catch (error) {
+      console.error('Failed to refresh model download status:', error);
+    }
   }
 
-  getDefault(): LocalModelInfo {
-    return this.models.get(DEFAULT_LOCAL_MODEL_ID) || LOCAL_MODELS[0];
+  async get(id: string): Promise<LocalModelInfo | undefined> {
+    await this.refreshDownloadStatus();
+    const model = this.models.get(id);
+    
+    // Only return if downloaded
+    if (model && model.downloaded) {
+      return model;
+    }
+    return undefined;
+  }
+
+  async getDefault(): Promise<LocalModelInfo | undefined> {
+    await this.refreshDownloadStatus();
+    
+    // Try to get the default model if downloaded
+    const defaultModel = this.models.get(DEFAULT_LOCAL_MODEL_ID);
+    if (defaultModel && defaultModel.downloaded) {
+      return defaultModel;
+    }
+    
+    // Otherwise return first downloaded model
+    const downloadedModels = Array.from(this.models.values()).filter(m => m.downloaded);
+    return downloadedModels[0];
+  }
+
+  /**
+   * Synchronous version for backward compatibility (returns empty if not initialized)
+   */
+  getAllSync(): LocalModelInfo[] {
+    return Array.from(this.models.values()).filter(m => m.downloaded);
+  }
+
+  getSync(id: string): LocalModelInfo | undefined {
+    const model = this.models.get(id);
+    return model && model.downloaded ? model : undefined;
+  }
+
+  getDefaultSync(): LocalModelInfo | undefined {
+    const defaultModel = this.models.get(DEFAULT_LOCAL_MODEL_ID);
+    if (defaultModel && defaultModel.downloaded) {
+      return defaultModel;
+    }
+    return Array.from(this.models.values()).find(m => m.downloaded);
   }
 
   registerCustom(model: LocalModelInfo): void {

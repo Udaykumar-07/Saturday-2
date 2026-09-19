@@ -38,9 +38,10 @@ export class LocalAIProvider implements AIProvider {
     this.enabled = config.enabled ?? false;
     this.modelRegistry = new LocalAIModelRegistry();
 
+    // Use synchronous getters for initialization (will use cached data)
     const selectedModel = config.modelId
-      ? this.modelRegistry.get(config.modelId) || this.modelRegistry.getDefault()
-      : this.modelRegistry.getDefault();
+      ? this.modelRegistry.getSync(config.modelId) || this.modelRegistry.getDefaultSync()
+      : this.modelRegistry.getDefaultSync();
 
     this.engine = new LocalInferenceEngine({
       model: selectedModel,
@@ -80,8 +81,8 @@ export class LocalAIProvider implements AIProvider {
   /**
    * Set the active local model by ID.
    */
-  setModel(modelId: string): boolean {
-    const model = this.modelRegistry.get(modelId);
+  async setModel(modelId: string): Promise<boolean> {
+    const model = await this.modelRegistry.get(modelId);
     if (!model) return false;
     this.engine.setModel(model);
     return true;
@@ -95,10 +96,10 @@ export class LocalAIProvider implements AIProvider {
   }
 
   /**
-   * Get all registered local models.
+   * Get all registered local models (only downloaded ones).
    */
-  getAllModels(): LocalModelInfo[] {
-    return this.modelRegistry.getAll();
+  async getAllModels(): Promise<LocalModelInfo[]> {
+    return await this.modelRegistry.getAll();
   }
 
   /**

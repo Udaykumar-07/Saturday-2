@@ -81,47 +81,56 @@ export const IntegrationsScreen: React.FC<IntegrationsScreenProps> = ({
 
             {/* Model Selector Cards */}
             <View style={styles.modelsContainer}>
-              {allModels.map((m) => {
-                const isSelected = m.id === activeModel.id;
-                return (
-                  <TouchableOpacity
-                    key={m.id}
-                    style={[
-                      styles.modelCard,
-                      isSelected && styles.modelCardSelected,
-                    ]}
-                    onPress={() => selectModel(m.id)}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.modelCardHeader}>
-                      <View style={styles.modelTitleContainer}>
-                        <Text style={styles.modelName}>{m.name}</Text>
-                        {m.recommended && (
-                          <View style={styles.recommendedBadge}>
-                            <Text style={styles.recommendedText}>Recommended</Text>
-                          </View>
-                        )}
+              {allModels.length === 0 ? (
+                <View style={styles.noModelsMessage}>
+                  <Text style={styles.noModelsTitle}>No Models Downloaded</Text>
+                  <Text style={styles.noModelsText}>
+                    Download a model using the button below to start using local AI inference.
+                  </Text>
+                </View>
+              ) : (
+                allModels.map((m) => {
+                  const isSelected = activeModel ? m.id === activeModel.id : false;
+                  return (
+                    <TouchableOpacity
+                      key={m.id}
+                      style={[
+                        styles.modelCard,
+                        isSelected && styles.modelCardSelected,
+                      ]}
+                      onPress={() => selectModel(m.id)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={styles.modelCardHeader}>
+                        <View style={styles.modelTitleContainer}>
+                          <Text style={styles.modelName}>{m.name}</Text>
+                          {m.recommended && (
+                            <View style={styles.recommendedBadge}>
+                              <Text style={styles.recommendedText}>Recommended</Text>
+                            </View>
+                          )}
+                        </View>
+                        <View
+                          style={[
+                            styles.radioCircle,
+                            isSelected && styles.radioCircleSelected,
+                          ]}
+                        >
+                          {isSelected && <View style={styles.radioInnerCircle} />}
+                        </View>
                       </View>
-                      <View
-                        style={[
-                          styles.radioCircle,
-                          isSelected && styles.radioCircleSelected,
-                        ]}
-                      >
-                        {isSelected && <View style={styles.radioInnerCircle} />}
+
+                      <Text style={styles.modelDescription}>{m.description}</Text>
+
+                      <View style={styles.modelMetaRow}>
+                        <Text style={styles.modelMetaTag}>Parameters: {m.parameters}</Text>
+                        <Text style={styles.modelMetaTag}>Size: {m.diskSize}</Text>
+                        <Text style={styles.modelMetaTag}>Speed: {m.speedRating}</Text>
                       </View>
-                    </View>
-
-                    <Text style={styles.modelDescription}>{m.description}</Text>
-
-                    <View style={styles.modelMetaRow}>
-                      <Text style={styles.modelMetaTag}>Parameters: {m.parameters}</Text>
-                      <Text style={styles.modelMetaTag}>Size: {m.diskSize}</Text>
-                      <Text style={styles.modelMetaTag}>Speed: {m.speedRating}</Text>
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
+                    </TouchableOpacity>
+                  );
+                })
+              )}
             </View>
 
             {/* Model Management Button */}
@@ -155,7 +164,7 @@ export const IntegrationsScreen: React.FC<IntegrationsScreenProps> = ({
               </TouchableOpacity>
               {testResult && (
                 <View style={styles.testResultBox}>
-                  <Text style={styles.testResultLabel}>Response from {activeModel.name}:</Text>
+                  <Text style={styles.testResultLabel}>Response from {activeModel?.name || 'Local AI'}:</Text>
                   <Text style={styles.testResultText}>{testResult}</Text>
                 </View>
               )}
@@ -509,5 +518,25 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     color: colors.textPrimary,
+  },
+  noModelsMessage: {
+    backgroundColor: colors.surface,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.surfaceBorder,
+    padding: 20,
+    alignItems: 'center',
+  },
+  noModelsTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.textPrimary,
+    marginBottom: 8,
+  },
+  noModelsText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
   },
 });

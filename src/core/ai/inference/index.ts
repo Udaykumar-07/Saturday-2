@@ -5,4 +5,4 @@
  * NO FALLBACKS - real inference only
  */
 
-export * from './ONNXInferenceEngine';
+export * from './LlamaCppInferenceEnginegine';

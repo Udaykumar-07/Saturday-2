@@ -1,15 +1,15 @@
 /**
- * ONNX Runtime Inference Engine for Qwen 2.5
+ * llama.cpp Inference Engine for GGUF models
  * 
- * This provides ACTUAL neural network inference using ONNX Runtime.
+ * This provides ACTUAL neural network inference using llama.cpp.
  * NO FALLBACKS, NO MOCKS - real model inference only.
  */
 
 import { NativeModules, Platform } from 'react-native';
 
-const { QwenONNXModule } = NativeModules;
+const { LlamaCppModule } = NativeModules;
 
-export interface ONNXInferenceOptions {
+export interface LlamaCppInferenceOptions {
   maxTokens?: number;
   temperature?: number;
   topP?: number;
@@ -18,7 +18,7 @@ export interface ONNXInferenceOptions {
   stopSequences?: string[];
 }
 
-export interface ONNXInferenceResult {
+export interface LlamaCppInferenceResult {
   text: string;
   tokensGenerated: number;
   latencyMs: number;
@@ -26,7 +26,7 @@ export interface ONNXInferenceResult {
   finishReason: 'eos' | 'max_tokens' | 'stop_sequence';
 }
 
-export interface ONNXModelStatus {
+export interface LlamaCppModelStatus {
   loaded: boolean;
   modelId?: string;
   modelPath?: string;
@@ -35,22 +35,22 @@ export interface ONNXModelStatus {
 }
 
 /**
- * ONNX Runtime Inference Engine
+ * llama.cpp Inference Engine
  * 
  * Throws errors if model not loaded or inference fails.
  * NO FALLBACKS - ensures actual model inference.
  */
-export class ONNXInferenceEngine {
+export class LlamaCppInferenceEngine {
   private modelLoaded: boolean = false;
   private modelId: string | null = null;
   private modelPath: string | null = null;
   private loadTimeMs: number = 0;
 
   /**
-   * Load ONNX model for inference
+   * Load GGUF model for inference
    * Throws error if loading fails
    */
-  async loadModel(modelPath: string, modelId: string): Promise<ONNXModelStatus> {
+  async loadModel(modelPath: string, modelId: string): Promise<LlamaCppModelStatus> {
     const startTime = Date.now();
 
     if (!modelPath) {
@@ -58,29 +58,29 @@ export class ONNXInferenceEngine {
     }
 
     if (Platform.OS === 'web') {
-      throw new Error('ONNX inference not supported on web platform. Models must be downloaded to device.');
+      throw new Error('llama.cpp inference not supported on web platform. Models must be downloaded to device.');
     }
 
     try {
-      if (!QwenONNXModule) {
+      if (!LlamaCppModule) {
         throw new Error(
-          'ONNX native module not available. Please ensure the app is built with native support.'
+          'llama.cpp native module not available. Please ensure the app is built with native support.'
         );
       }
 
-      console.log(`Loading ONNX model: ${modelId} from ${modelPath}`);
-      const result = await QwenONNXModule.loadModel(modelPath);
+      // Initialize llama.cpp (no-op, but kept for consistency)
+      console.log('Initializing llama.cpp...');
+      await LlamaCppModule.initialize();
 
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to load ONNX model');
-      }
+      console.log(`Loading GGUF model: ${modelId} from ${modelPath}`);
+      await LlamaCppModule.loadModel(modelPath);
 
       this.modelLoaded = true;
       this.modelId = modelId;
       this.modelPath = modelPath;
       this.loadTimeMs = Date.now() - startTime;
 
-      console.log(`✓ ONNX model loaded successfully in ${this.loadTimeMs}ms`);
+      console.log(`✓ llama.cpp model loaded successfully in ${this.loadTimeMs}ms`);
 
       return {
         loaded: true,
@@ -94,9 +94,9 @@ export class ONNXInferenceEngine {
       this.modelPath = null;
 
       const errorMessage = error instanceof Error ? error.message : 'Unknown error loading model';
-      console.error('✗ Failed to load ONNX model:', errorMessage);
+      console.error('✗ Failed to load llama.cpp model:', errorMessage);
 
-      throw new Error(`Failed to load ONNX model: ${errorMessage}`);
+      throw new Error(`Failed to load GGUF model: ${errorMessage}`);
     }
   }
 
@@ -109,13 +109,13 @@ export class ONNXInferenceEngine {
     }
 
     try {
-      if (QwenONNXModule && Platform.OS !== 'web') {
-        await QwenONNXModule.unloadModel();
+      if (LlamaCppModule && Platform.OS !== 'web') {
+        await LlamaCppModule.unloadModel();
       }
 
-      console.log('✓ ONNX model unloaded');
+      console.log('✓ llama.cpp model unloaded');
     } catch (error) {
-      console.error('Error unloading ONNX model:', error);
+      console.error('Error unloading llama.cpp model:', error);
     }
 
     this.modelLoaded = false;
@@ -129,10 +129,10 @@ export class ONNXInferenceEngine {
    * Throws error if model not loaded or inference fails
    * NO FALLBACKS - actual inference only
    */
-  async infer(prompt: string, options: ONNXInferenceOptions = {}): Promise<ONNXInferenceResult> {
+  async infer(prompt: string, options: LlamaCppInferenceOptions = {}): Promise<LlamaCppInferenceResult> {
     if (!this.modelLoaded) {
       throw new Error(
-        'ONNX model is not loaded. Please download and load a model first. ' +
+        'llama.cpp model is not loaded. Please download and load a model first. ' +
         'Go to Settings > Model Management to download a model.'
       );
     }
@@ -153,22 +153,24 @@ export class ONNXInferenceEngine {
     };
 
     try {
-      if (!QwenONNXModule || Platform.OS === 'web') {
-        throw new Error('ONNX native module not available');
+      if (!LlamaCppModule || Platform.OS === 'web') {
+        throw new Error('llama.cpp native module not available');
       }
 
-      console.log(`Running ONNX inference on prompt: "${prompt.substring(0, 50)}..."`);
+      console.log(`Running llama.cpp inference on prompt: "${prompt.substring(0, 50)}..."`);
 
-      const result = await QwenONNXModule.generateText(prompt, inferenceOptions);
-
-      if (!result.success) {
-        throw new Error(result.error || 'ONNX inference failed');
-      }
+      const result = await LlamaCppModule.infer(
+        prompt,
+        inferenceOptions.maxTokens,
+        inferenceOptions.temperature,
+        inferenceOptions.topK,
+        inferenceOptions.topP
+      );
 
       const latencyMs = Date.now() - startTime;
       const tokensPerSecond = parseFloat((result.tokensGenerated / (latencyMs / 1000)).toFixed(1));
 
-      console.log(`✓ ONNX inference completed in ${latencyMs}ms (${tokensPerSecond} tok/s)`);
+      console.log(`✓ llama.cpp inference completed in ${latencyMs}ms (${tokensPerSecond} tok/s)`);
 
       return {
         text: result.text,
@@ -179,16 +181,16 @@ export class ONNXInferenceEngine {
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown inference error';
-      console.error('✗ ONNX inference failed:', errorMessage);
+      console.error('✗ llama.cpp inference failed:', errorMessage);
 
-      throw new Error(`ONNX inference failed: ${errorMessage}`);
+      throw new Error(`llama.cpp inference failed: ${errorMessage}`);
     }
   }
 
   /**
    * Get current model status
    */
-  getStatus(): ONNXModelStatus {
+  getStatus(): LlamaCppModelStatus {
     return {
       loaded: this.modelLoaded,
       modelId: this.modelId || undefined,

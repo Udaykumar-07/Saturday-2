@@ -67,7 +67,7 @@ export class LocalAIService {
    */
   async selectModel(modelId: string): Promise<boolean> {
     await this.initialize();
-    const success = this.provider.setModel(modelId);
+    const success = await this.provider.setModel(modelId);
     if (success) {
       this.settings.activeModelId = modelId;
       await this.persistSettings();
@@ -83,10 +83,10 @@ export class LocalAIService {
   }
 
   /**
-   * Get all supported local models.
+   * Get all supported local models (only downloaded ones).
    */
-  getAllModels(): LocalModelInfo[] {
-    return this.provider.getAllModels();
+  async getAllModels(): Promise<LocalModelInfo[]> {
+    return await this.provider.getAllModels();
   }
 
   /**

@@ -16,7 +16,7 @@ import {
 import { QwenTokenizer } from './QwenTokenizer';
 import { QwenLogger } from './QwenLogger';
 import { TFLiteModelManager } from '../tflite/TFLiteModelManager';
-import { ONNXInferenceEngine } from '../inference/ONNXInferenceEngine';
+import { LlamaCppInferenceEngine } from '../inference/LlamaCppInferenceEngine';
 
 export class QwenModelRuntime {
   readonly modelId = 'qwen2.5-0.5b-instruct-int4';
@@ -28,7 +28,7 @@ export class QwenModelRuntime {
 
   private state: QwenProviderState = 'UNINITIALIZED';
   private tokenizer: QwenTokenizer = new QwenTokenizer();
-  private inferenceEngine: ONNXInferenceEngine;
+  private inferenceEngine: LlamaCppInferenceEngine;
   private modelManager: TFLiteModelManager;
   private loadStartTime = 0;
   private loadTimeMs = 0;
@@ -50,7 +50,7 @@ export class QwenModelRuntime {
   };
 
   constructor() {
-    this.inferenceEngine = new ONNXInferenceEngine();
+    this.inferenceEngine = new LlamaCppInferenceEngine();
     this.modelManager = new TFLiteModelManager();
   }
 
@@ -80,7 +80,7 @@ export class QwenModelRuntime {
         ? {
             ...this.lastError,
             modelId: this.modelId,
-            runtime: 'onnx-runtime',
+            runtime: 'llama.cpp',
           }
         : undefined,
       diagnostics: { ...this.diagnostics },

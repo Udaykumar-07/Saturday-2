@@ -9,7 +9,7 @@ export { FailingAIProvider } from './FailingAIProvider';
 export {
   LocalAIModelRegistry,
   type LocalModelInfo,
-  LOCAL_MODELS,
+  ALL_LOCAL_MODELS,
   DEFAULT_LOCAL_MODEL_ID,
 } from './LocalAIModelRegistry';
 export {
