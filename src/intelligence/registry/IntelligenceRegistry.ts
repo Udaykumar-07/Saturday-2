@@ -136,6 +136,129 @@ export class IntelligenceRegistry {
   }
 
   /**
+   * Register an external provider with full intelligence metadata.
+   */
+  registerExternalProvider(config: {
+    id: string;
+    name: string;
+    type: 'CLOUD_MODEL';
+    capabilities: string[];
+    costProfile: {
+      inputCostPer1kTokens: number;
+      outputCostPer1kTokens: number;
+    };
+    latencyProfile: {
+      averageMs: number;
+      p50Ms: number;
+    };
+    benchmarkScores: Record<string, number>;
+  }): void {
+    const now = Date.now();
+    
+    // Map capability strings to ProviderCapability objects
+    const capabilities = config.capabilities.map((cap) => ({
+      id: cap as any,
+      category: this.inferCapabilityCategory(cap),
+      score: 0.9,
+    }));
+
+    const entry: IntelligenceProviderEntry = {
+      id: config.id,
+      name: config.name,
+      type: config.type,
+      capabilities,
+      inputTypes: ['text', 'json'],
+      outputTypes: ['text', 'json'],
+      reasoningLevel: 'deep',
+      contextWindow: 128000,
+      visionSupport: config.capabilities.includes('VISION'),
+      codingSupport: config.capabilities.includes('CODING'),
+      researchSupport: false,
+      agenticSupport: false,
+      supportsStreaming: true,
+      supportsStructuredOutput: true,
+      supportsFunctionCalling: config.capabilities.includes('FUNCTION_CALLING'),
+      privacyProfile: {
+        level: 'standard',
+        dataRetentionPolicy: 'none',
+        sendsDataExternally: true,
+        storageLocation: 'cloud',
+      },
+      costProfile: {
+        costTier: 'medium',
+        inputCostPer1kTokens: config.costProfile.inputCostPer1kTokens,
+        outputCostPer1kTokens: config.costProfile.outputCostPer1kTokens,
+        currency: 'USD',
+      },
+      latencyProfile: {
+        averageMs: config.latencyProfile.averageMs,
+        p50Ms: config.latencyProfile.p50Ms,
+        p95Ms: config.latencyProfile.p50Ms * 2,
+        timeToFirstTokenMs: config.latencyProfile.p50Ms * 0.4,
+      },
+      reliabilityProfile: {
+        successRate: 0.97,
+        failureRate: 0.03,
+        sampleSize: 100,
+      },
+      state: 'UNAVAILABLE', // External providers start unavailable until API key configured
+      lastUpdated: now,
+      source: 'external',
+      version: '1.0.0',
+    };
+
+    this.registerProvider(entry);
+  }
+
+  /**
+   * Get providers that match specific task requirements.
+   */
+  getProvidersByRequirement(requirements: TaskRequirements): IntelligenceProviderEntry[] {
+    const active = this.getActiveProviders();
+    const reqCaps = requirements.capabilities || [];
+
+    if (reqCaps.length === 0) {
+      return active;
+    }
+
+    return active.filter((provider) => {
+      // Check capability match
+      const provCaps = provider.capabilities.map((c) => normalizeCapability(c.id));
+      const hasRequiredCaps = reqCaps.every((reqCap) =>
+        provCaps.some((provCap) => provCap === normalizeCapability(reqCap))
+      );
+
+      if (!hasRequiredCaps) return false;
+
+      // Check reasoning level match
+      const reasoningLevels = ['none', 'basic', 'advanced', 'deep'];
+      const reqLevel = reasoningLevels.indexOf(requirements.reasoningLevel);
+      const provLevel = reasoningLevels.indexOf(provider.reasoningLevel);
+      if (provLevel < reqLevel) return false;
+
+      return true;
+    });
+  }
+
+  /**
+   * Infer capability category from capability ID.
+   */
+  private inferCapabilityCategory(capability: string): any {
+    const categoryMap: Record<string, string> = {
+      TEXT_GENERATION: 'generation',
+      REASONING: 'reasoning',
+      DEEP_REASONING: 'reasoning',
+      CODING: 'coding',
+      DEBUGGING: 'coding',
+      VISION: 'media',
+      FUNCTION_CALLING: 'tools',
+      STRUCTURED_OUTPUT: 'generation',
+      LONG_CONTEXT: 'generation',
+    };
+    return categoryMap[capability] || 'generation';
+  }
+
+  /**
    * Pre-populate default built-in providers for Saturday.
    */
   private registerBuiltInProviders(): void {
@@ -391,6 +514,66 @@ export class IntelligenceRegistry {
       lastUpdated: now,
       source: 'built-in',
       version: '1.0.0',
+    });
+
+    // 6. OpenAI (GPT-4o)
+    this.registerExternalProvider({
+      id: 'openai_provider',
+      name: 'OpenAI GPT-4o',
+      type: 'CLOUD_MODEL',
+      capabilities: ['TEXT_GENERATION', 'REASONING', 'DEEP_REASONING', 'CODING', 'VISION', 'FUNCTION_CALLING', 'STRUCTURED_OUTPUT'],
+      costProfile: {
+        inputCostPer1kTokens: 0.0025,
+        outputCostPer1kTokens: 0.01,
+      },
+      latencyProfile: {
+        averageMs: 1200,
+        p50Ms: 1000,
+      },
+      benchmarkScores: {
+        MMLU: 88.7,
+        HumanEval: 90.2,
+      },
+    });
+
+    // 7. Anthropic Claude 3.5 Sonnet
+    this.registerExternalProvider({
+      id: 'anthropic_provider',
+      name: 'Anthropic Claude 3.5 Sonnet',
+      type: 'CLOUD_MODEL',
+      capabilities: ['TEXT_GENERATION', 'REASONING', 'DEEP_REASONING', 'CODING', 'VISION', 'LONG_CONTEXT'],
+      costProfile: {
+        inputCostPer1kTokens: 0.003,
+        outputCostPer1kTokens: 0.015,
+      },
+      latencyProfile: {
+        averageMs: 1400,
+        p50Ms: 1100,
+      },
+      benchmarkScores: {
+        MMLU: 88.3,
+        HumanEval: 92.0,
+      },
+    });
+
+    // 8. Google Gemini 1.5 Pro
+    this.registerExternalProvider({
+      id: 'google_gemini_provider',
+      name: 'Google Gemini 1.5 Pro',
+      type: 'CLOUD_MODEL',
+      capabilities: ['TEXT_GENERATION', 'REASONING', 'CODING', 'VISION', 'LONG_CONTEXT'],
+      costProfile: {
+        inputCostPer1kTokens: 0.00125,
+        outputCostPer1kTokens: 0.005,
+      },
+      latencyProfile: {
+        averageMs: 1300,
+        p50Ms: 1050,
+      },
+      benchmarkScores: {
+        MMLU: 85.9,
+        HumanEval: 84.1,
+      },
     });
   }
 }

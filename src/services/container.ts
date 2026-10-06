@@ -28,6 +28,12 @@ import {
   QwenOrchestrator,
 } from '../core/ai/qwen';
 
+import {
+  LayaRuntime,
+  LayaModelManager,
+  LayaIntentClassifier,
+} from '../core/ai/laya';
+
 import { MemoryService } from './MemoryService';
 import { PersonalityService } from './PersonalityService';
 import { ConversationService } from './ConversationService';
@@ -43,6 +49,9 @@ import { registerAllCapabilities } from '../capabilities';
 import { CredentialStore } from '../core/external/authentication/CredentialStore';
 import { AuthenticationManager } from '../core/external/authentication/AuthenticationManager';
 import { ExternalProviderRegistry } from '../core/external/providers/ExternalProviderRegistry';
+import { OpenAIProvider } from '../core/external/providers/OpenAIProvider';
+import { AnthropicProvider } from '../core/external/providers/AnthropicProvider';
+import { GoogleGeminiProvider } from '../core/external/providers/GoogleGeminiProvider';
 import { AgentRegistry } from '../core/external/agents/AgentRegistry';
 import { AgentClient } from '../core/external/agents/AgentClient';
 import { AgentCommunicationLayer } from '../core/external/agents/AgentCommunicationLayer';
@@ -113,6 +122,11 @@ export class ServiceContainer {
   readonly modelReadinessService: LocalAIReadinessService;
   readonly qwenOrchestrator: QwenOrchestrator;
 
+  // Laya On-Device Intent Classification
+  readonly layaRuntime: LayaRuntime;
+  readonly layaModelManager: LayaModelManager;
+  readonly layaClassifier: LayaIntentClassifier;
+
   // Action Engine (Phase 2)
   readonly capabilityRegistry: CapabilityRegistry;
   readonly actionEngine: ActionEngine;
@@ -122,6 +136,9 @@ export class ServiceContainer {
   readonly credentialStore: CredentialStore;
   readonly authManager: AuthenticationManager;
   readonly externalRegistry: ExternalProviderRegistry;
+  readonly openAIProvider: OpenAIProvider;
+  readonly anthropicProvider: AnthropicProvider;
+  readonly googleGeminiProvider: GoogleGeminiProvider;
   readonly agentRegistry: AgentRegistry;
   readonly agentClient: AgentClient;
   readonly agentLayer: AgentCommunicationLayer;
@@ -198,6 +215,14 @@ export class ServiceContainer {
     this.credentialStore = new CredentialStore();
     this.authManager = new AuthenticationManager(this.credentialStore);
     this.externalRegistry = new ExternalProviderRegistry();
+    
+    // Instantiate and register external AI providers
+    this.openAIProvider = new OpenAIProvider(this.credentialStore);
+    this.anthropicProvider = new AnthropicProvider(this.credentialStore);
+    this.googleGeminiProvider = new GoogleGeminiProvider(this.credentialStore);
+    this.externalRegistry.register(this.openAIProvider);
+    this.externalRegistry.register(this.anthropicProvider);
+    this.externalRegistry.register(this.googleGeminiProvider);
     this.agentRegistry = new AgentRegistry();
     this.agentClient = new AgentClient();
     this.agentLayer = new AgentCommunicationLayer(
@@ -302,6 +327,26 @@ export class ServiceContainer {
       this.actionService,
       this.externalService
     );
+
+    // 8b. Laya On-Device Intent Classification
+    this.layaRuntime = new LayaRuntime();
+    this.layaModelManager = new LayaModelManager();
+    this.layaClassifier = new LayaIntentClassifier(this.layaRuntime);
+    this.taskUnderstanding.setLayaClassifier(this.layaClassifier);
+
+    // Auto-load Laya model if already downloaded (non-blocking)
+    this.layaModelManager.isInstalled().then(async (installed) => {
+      if (installed) {
+        try {
+          await this.layaModelManager.loadRuntime(this.layaRuntime);
+          console.log('[Saturday] Laya ONNX model successfully loaded and active');
+        } catch (error) {
+          console.warn('[Saturday] Failed to auto-load Laya ONNX runtime:', error);
+        }
+      } else {
+        console.log('[Saturday] Laya model not installed. Download via Settings to enable ML classification.');
+      }
+    }).catch(() => {});
 
     // 9. Orchestration Services
     this.conversationService = new ConversationService(
