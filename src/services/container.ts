@@ -88,6 +88,7 @@ import {
   ProviderEvaluationService,
   RoutingDecisionEngine,
 } from '../intelligence';
+import { ProviderMetadataStore, KNOWN_BENCHMARKS } from '../intelligence/metadata';
 
 export class ServiceContainer {
   private static instance: ServiceContainer | null = null;
@@ -170,6 +171,7 @@ export class ServiceContainer {
   readonly routingScorer: RoutingScorer;
   readonly providerEvaluation: ProviderEvaluationService;
   readonly decisionEngine: RoutingDecisionEngine;
+  readonly providerMetadata: ProviderMetadataStore;
 
   private constructor() {
     // 1. Storage
@@ -276,8 +278,11 @@ export class ServiceContainer {
       this.intelligenceRegistry,
       this.hardConstraintFilter,
       this.providerEvaluation,
-      this.benchmarkStore
+      this.benchmarkStore,
+      this.credentialStore
     );
+
+    this.providerMetadata = new ProviderMetadataStore(KNOWN_BENCHMARKS);
 
     this.intelligenceRouter = new IntelligenceRouter(
       this.requirementsAnalyzer,

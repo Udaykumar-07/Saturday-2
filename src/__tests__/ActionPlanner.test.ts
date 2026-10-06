@@ -98,4 +98,22 @@ describe('ActionPlanner', () => {
     expect(urlStep).toBeDefined();
     expect((urlStep!.params.url as string)).toContain('hello%20world');
   });
+
+  test('plans "open YouTube and play a song"', () => {
+    const plan = planner.plan('open YouTube and play a song');
+    expect(plan).not.toBeNull();
+    expect(plan!.steps).toHaveLength(2);
+    expect(plan!.steps[0].capability).toBe('app.launch');
+    expect(plan!.steps[0].params.packageName).toBe('com.google.android.youtube');
+    expect(plan!.steps[1].capability).toBe('media.play');
+    expect(plan!.steps[1].params.query).toBe('a song');
+  });
+
+  test('plans "can you open YouTube and play Radioactive"', () => {
+    const plan = planner.plan('can you open YouTube and play Radioactive');
+    expect(plan).not.toBeNull();
+    expect(plan!.steps).toHaveLength(2);
+    expect(plan!.steps[1].capability).toBe('media.play');
+    expect(plan!.steps[1].params.query).toBe('Radioactive');
+  });
 });

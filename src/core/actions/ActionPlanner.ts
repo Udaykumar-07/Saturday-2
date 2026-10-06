@@ -44,8 +44,19 @@ export class ActionPlanner {
    * Phase 2 uses keyword pattern matching.
    */
   plan(input: string): ActionPlan | null {
-    const trimmed = input.trim();
+    let trimmed = input.trim();
     if (!trimmed) return null;
+
+    // Strip polite conversational prefixes
+    trimmed = trimmed.replace(/^(?:please|could you|can you|hey saturday,?|saturday,?)\s+/i, '');
+
+    // Pattern: "open/launch <app> and/to play <query>"
+    const openAndPlayMatch = trimmed.match(
+      /^(?:open|launch)\s+(.+?)\s+(?:and|to)\s+play\s+(.+)$/i
+    );
+    if (openAndPlayMatch) {
+      return this.planPlayMedia(trimmed, openAndPlayMatch[1].trim(), openAndPlayMatch[2].trim());
+    }
 
     // Pattern: "open/launch <app> and search/find <query>"
     const openAndSearchMatch = trimmed.match(
@@ -55,14 +66,14 @@ export class ActionPlanner {
       return this.planOpenAndSearch(trimmed, openAndSearchMatch[1].trim(), openAndSearchMatch[2].trim());
     }
 
-    // Pattern: "search <query> on <app>"
-    const searchOnMatch = trimmed.match(/^search\s+(.+?)\s+on\s+(.+)$/i);
+    // Pattern: "search <query> on/in <app>"
+    const searchOnMatch = trimmed.match(/^search\s+(.+?)\s+(?:on|in)\s+(.+)$/i);
     if (searchOnMatch) {
       return this.planSearchOn(trimmed, searchOnMatch[2].trim(), searchOnMatch[1].trim());
     }
 
-    // Pattern: "play <song/video> on <app>"
-    const playOnMatch = trimmed.match(/^play\s+(.+?)\s+on\s+(.+)$/i);
+    // Pattern: "play <song/video> on/in <app>"
+    const playOnMatch = trimmed.match(/^play\s+(.+?)\s+(?:on|in)\s+(.+)$/i);
     if (playOnMatch) {
       return this.planPlayMedia(trimmed, playOnMatch[2].trim(), playOnMatch[1].trim());
     }

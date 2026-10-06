@@ -1,0 +1,31 @@
+{
+  "project_type": "React Native (Expo) Android AI assistant with TypeScript, llama.rn for local LLM, ONNX for Laya intent classification",
+  "language": "TypeScript",
+  "build_system": "npm with Expo ~51.0.31, React Native 0.74.5, no build script found",
+  "test_framework": "Jest with jest-expo ~51.0.4",
+  "build_command": "npm run typecheck",
+  "test_command": "npm test",
+  "verification_instructions": "Run typecheck after each change. No test suite currently exists for external providers. Verification is via typecheck + manual testing in Expo.",
+  "snapshot_or_generated_files": null,
+  "environment_constraints": "React Native Expo environment. No hot reload for native dependencies. Secure keys must use expo-secure-store via CredentialStore. Never use AsyncStorage for API keys.",
+  "contribution_requirements": "EXTEND existing files, never replace. Use existing error types from src/core/types/errors.ts. Follow Saturday's TypeScript patterns. All external provider state stored via CredentialStore with service IDs: openai_provider, anthropic_provider, google_gemini_provider.",
+  "key_patterns": "BaseExternalProvider abstract class for provider adapters. ExternalProviderRegistry for provider lookup. IntelligenceRegistry for capability metadata. RoutingDecisionEngine uses TaskRequirements and returns RoutingDecision. ConversationService orchestrates message flow and calls provider config callbacks. IntegrationsScreen extends with new sections, never replaces existing ones.",
+  "relevant_files": [
+    "c:\\Users\\uk\\Pictures\\Saturday-2\\src\\core\\external\\providers\\ExternalProvider.ts",
+    "c:\\Users\\uk\\Pictures\\Saturday-2\\src\\core\\external\\providers\\ExternalProviderRegistry.ts",
+    "c:\\Users\\uk\\Pictures\\Saturday-2\\src\\core\\external\\services\\gmail\\GmailProvider.ts",
+    "c:\\Users\\uk\\Pictures\\Saturday-2\\src\\core\\external\\authentication\\CredentialStore.ts",
+    "c:\\Users\\uk\\Pictures\\Saturday-2\\src\\intelligence\\registry\\IntelligenceRegistry.ts",
+    "c:\\Users\\uk\\Pictures\\Saturday-2\\src\\intelligence\\routing\\RoutingDecisionEngine.ts",
+    "c:\\Users\\uk\\Pictures\\Saturday-2\\src\\core\\ai\\laya\\LayaIntentClassifier.ts",
+    "c:\\Users\\uk\\Pictures\\Saturday-2\\src\\ui\\screens\\IntegrationsScreen.tsx",
+    "c:\\Users\\uk\\Pictures\\Saturday-2\\src\\ui\\screens\\HomeScreen.tsx",
+    "c:\\Users\\uk\\Pictures\\Saturday-2\\src\\services\\ConversationService.ts",
+    "c:\\Users\\uk\\Pictures\\Saturday-2\\src\\services\\container.ts",
+    "c:\\Users\\uk\\Pictures\\Saturday-2\\src\\ui\\theme\\colors.ts",
+    "c:\\Users\\uk\\Pictures\\Saturday-2\\src\\core\\types\\errors.ts",
+    "c:\\Users\\uk\\Pictures\\Saturday-2\\src\\core\\types\\external.ts",
+    "c:\\Users\\uk\\Pictures\\Saturday-2\\src\\core\\types\\intelligence.ts"
+  ],
+  "directory_structure": "src/core/external/providers/ for provider adapters; src/intelligence/ for routing, registry, metadata stores, benchmarks; src/ui/components/ for reusable React Native components; src/ui/screens/ for full-screen modals; src/services/ for orchestration logic; src/core/types/ for TypeScript interfaces"
+}

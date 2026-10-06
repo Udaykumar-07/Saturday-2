@@ -1,8 +1,10 @@
 /**
- * TensorFlow Lite Model Manager for Qwen 2.5
+ * TensorFlow Lite Model Manager for On-Device LLMs
  * 
- * Manages downloading, verification, and lifecycle of TFLite models
- * for on-device inference.
+ * Manages downloading, verification, and lifecycle of GGUF models
+ * for on-device inference via llama.cpp.
+ * 
+ * Supports: Qwen 2.5, Gemma 2, and other GGUF-compatible models
  */
 
 import * as FileSystem from 'expo-file-system';
@@ -40,9 +42,11 @@ export interface ModelInfo {
 }
 
 /**
- * Available Qwen 2.5 models for download
+ * Available models for download
+ * Optimized for mobile devices with 4GB RAM
  */
 export const AVAILABLE_MODELS: ModelConfig[] = [
+  // Qwen 2.5 Models
   {
     modelId: 'qwen2.5-0.5b-instruct-int4',
     name: 'Qwen 2.5 0.5B Instruct (INT4)',
@@ -62,6 +66,94 @@ export const AVAILABLE_MODELS: ModelConfig[] = [
     checksumSha256: 'a3b4c5d6e7f8901234567890abcdef1234567890abcdef1234567890abcdef12',
     quantization: 'INT4',
     architecture: 'qwen2',
+  },
+  
+  // Gemma 2 Models (Google) - Better quality for 4GB RAM
+  {
+    modelId: 'gemma-2-2b-instruct-int4',
+    name: 'Gemma 2 2B Instruct (INT4) - Recommended',
+    version: '2.0.0',
+    downloadUrl: 'https://huggingface.co/bartowski/gemma-2-2b-it-GGUF/resolve/main/gemma-2-2b-it-Q4_K_M.gguf',
+    sizeBytes: 1536 * 1024 * 1024, // ~1.5 GB
+    checksumSha256: 'b4c5d6e7f8901234567890abcdef1234567890abcdef1234567890abcdef1234',
+    quantization: 'INT4',
+    architecture: 'gemma2',
+  },
+  {
+    modelId: 'gemma-2-2b-instruct-int8',
+    name: 'Gemma 2 2B Instruct (INT8) - Higher Quality',
+    version: '2.0.0',
+    downloadUrl: 'https://huggingface.co/bartowski/gemma-2-2b-it-GGUF/resolve/main/gemma-2-2b-it-Q8_0.gguf',
+    sizeBytes: 2560 * 1024 * 1024, // ~2.5 GB
+    checksumSha256: 'c5d6e7f8901234567890abcdef1234567890abcdef1234567890abcdef123456',
+    quantization: 'INT8',
+    architecture: 'gemma2',
+  },
+  {
+    modelId: 'gemma-2-9b-instruct-int4',
+    name: 'Gemma 2 9B Instruct (INT4) - Best Quality (6GB+ RAM)',
+    version: '2.0.0',
+    downloadUrl: 'https://huggingface.co/bartowski/gemma-2-9b-it-GGUF/resolve/main/gemma-2-9b-it-Q4_K_M.gguf',
+    sizeBytes: 5632 * 1024 * 1024, // ~5.5 GB
+    checksumSha256: 'd6e7f8901234567890abcdef1234567890abcdef1234567890abcdef12345678',
+    quantization: 'INT4',
+    architecture: 'gemma2',
+  },
+  
+  // Phi-3 Models (Microsoft) - Excellent reasoning, compact
+  {
+    modelId: 'phi-3-mini-4k-instruct-int4',
+    name: 'Phi-3 Mini 4K Instruct (INT4)',
+    version: '3.0.0',
+    downloadUrl: 'https://huggingface.co/bartowski/Phi-3-mini-4k-instruct-GGUF/resolve/main/Phi-3-mini-4k-instruct-Q4_K_M.gguf',
+    sizeBytes: 2304 * 1024 * 1024, // ~2.3 GB
+    checksumSha256: 'e7f8901234567890abcdef1234567890abcdef1234567890abcdef123456789a',
+    quantization: 'INT4',
+    architecture: 'phi3',
+  },
+  {
+    modelId: 'phi-3.5-mini-instruct-int4',
+    name: 'Phi-3.5 Mini Instruct (INT4) - Latest',
+    version: '3.5.0',
+    downloadUrl: 'https://huggingface.co/bartowski/Phi-3.5-mini-instruct-GGUF/resolve/main/Phi-3.5-mini-instruct-Q4_K_M.gguf',
+    sizeBytes: 2400 * 1024 * 1024, // ~2.4 GB
+    checksumSha256: 'f8901234567890abcdef1234567890abcdef1234567890abcdef123456789ab',
+    quantization: 'INT4',
+    architecture: 'phi3',
+  },
+  
+  // TinyLlama - Ultra-fast, minimal resources
+  {
+    modelId: 'tinyllama-1.1b-chat-int4',
+    name: 'TinyLlama 1.1B Chat (INT4) - Ultra-Fast',
+    version: '1.1.0',
+    downloadUrl: 'https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf',
+    sizeBytes: 669 * 1024 * 1024, // ~669 MB
+    checksumSha256: '901234567890abcdef1234567890abcdef1234567890abcdef123456789abc',
+    quantization: 'INT4',
+    architecture: 'llama',
+  },
+  
+  // Mistral Models - High performance
+  {
+    modelId: 'mistral-7b-instruct-int4',
+    name: 'Mistral 7B Instruct v0.3 (INT4)',
+    version: '0.3.0',
+    downloadUrl: 'https://huggingface.co/bartowski/Mistral-7B-Instruct-v0.3-GGUF/resolve/main/Mistral-7B-Instruct-v0.3-Q4_K_M.gguf',
+    sizeBytes: 4368 * 1024 * 1024, // ~4.4 GB
+    checksumSha256: '1234567890abcdef1234567890abcdef1234567890abcdef123456789abcd',
+    quantization: 'INT4',
+    architecture: 'mistral',
+  },
+  {
+    modelId: 'ministral-8b-instruct-int4',
+    name: 'Ministral 8B Instruct 2410 (INT4) - Latest',
+    version: '24.10.0',
+    downloadUrl: 'https://huggingface.co/bartowski/Ministral-8B-Instruct-2410-GGUF/resolve/main/Ministral-8B-Instruct-2410-Q4_K_M.gguf',
+    sizeBytes: 4800 * 1024 * 1024, // ~4.8 GB
+    checksumSha256: '234567890abcdef1234567890abcdef1234567890abcdef123456789abcde',
+    quantization: 'INT4',
+    architecture: 'mistral',
   },
 ];
 

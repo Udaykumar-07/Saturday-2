@@ -17,6 +17,7 @@ import { PrivacyRouter } from '../intelligence/privacy/PrivacyRouter';
 import { RoutingFeedbackService } from '../intelligence/feedback/RoutingFeedbackService';
 import { RoutingScorer } from '../intelligence/routing/RoutingScorer';
 import { TaskRequirements } from '../core/types/external';
+import { CredentialStore } from '../core/external/authentication/CredentialStore';
 
 describe('RoutingDecisionEngine', () => {
   let engine: RoutingDecisionEngine;
@@ -31,6 +32,7 @@ describe('RoutingDecisionEngine', () => {
     const privacyRouter = new PrivacyRouter();
     const feedbackService = new RoutingFeedbackService();
     const scorer = new RoutingScorer();
+    const credentialStore = new CredentialStore();
 
     const hardConstraintFilter = new HardConstraintFilter(privacyRouter, costEstimator);
     const evaluationService = new ProviderEvaluationService(
@@ -47,7 +49,8 @@ describe('RoutingDecisionEngine', () => {
       registry,
       hardConstraintFilter,
       evaluationService,
-      benchmarkStore
+      benchmarkStore,
+      credentialStore
     );
   });
 

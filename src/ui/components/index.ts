@@ -11,4 +11,5 @@ export * from './ActionStatus';
 export * from './AuthPrompt';
 export * from './IntegrationCard';
 export * from './LocalAISettingsSection';
-
+export * from './LayaAISettingsSection';
+export * from './ProviderRequestModal';

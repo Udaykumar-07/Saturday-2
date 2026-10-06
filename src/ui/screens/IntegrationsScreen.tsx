@@ -20,6 +20,7 @@ import {
 } from 'react-native';
 import { colors } from '../theme/colors';
 import { IntegrationCard } from '../components/IntegrationCard';
+import { LayaAISettingsSection } from '../components/LayaAISettingsSection';
 import { useIntegrations } from '../../hooks/useIntegrations';
 import { useLocalAI } from '../../hooks/useLocalAI';
 import { ModelManagementScreen } from './ModelManagementScreen';
@@ -170,6 +171,9 @@ export const IntegrationsScreen: React.FC<IntegrationsScreenProps> = ({
               )}
             </View>
           </View>
+
+          {/* Section: On-Device Laya Decision Router */}
+          <LayaAISettingsSection />
 
           {/* Section: Connected Services */}
           <View style={styles.section}>

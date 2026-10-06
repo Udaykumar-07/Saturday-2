@@ -49,6 +49,8 @@ export interface QwenInferenceOptions {
   temperature?: number;
   maxTokens?: number;
   topP?: number;
+  topK?: number;
+  repeatPenalty?: number;
   stopSequences?: string[];
   requestId?: string;
 }

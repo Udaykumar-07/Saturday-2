@@ -1,0 +1,7 @@
+{
+  "task_id": "task-provider-integration",
+  "task_description": "Expand Saturday's AI provider catalog with real API integrations for OpenAI, Anthropic, and Google Gemini. Add inline ProviderRequestModal for configuration prompts. Enhance Laya's routing with richer metadata and benchmarks.",
+  "status": "pending",
+  "feature_order": ["FEAT-001", "FEAT-002", "FEAT-003"],
+  "blocked_reason": null
+}

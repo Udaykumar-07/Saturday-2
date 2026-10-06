@@ -44,23 +44,22 @@ export class QwenContextBuilder {
 
     const sections: string[] = [
       `SYSTEM:\n${systemPrompt}`,
-      modelHeader,
     ];
 
     if (userProfile) {
       sections.push(userProfile);
     }
 
-    // Include recent conversational turns (up to 3) if available
-    const recentMessages = messages.slice(-4, -1);
+    // Include recent conversation history (last 3-4 messages for context)
+    const recentMessages = messages.slice(-4, -1); // Last 3 messages before current
     if (recentMessages.length > 0) {
       const history = recentMessages
         .map((m) => `${m.role.toUpperCase()}: ${m.content}`)
         .join('\n');
-      sections.push(`CONVERSATION HISTORY:\n${history}`);
+      sections.push(`CONVERSATION:\n${history}`);
     }
 
-    sections.push(`CURRENT REQUEST:\n${currentRequest}`);
+    sections.push(`USER: ${currentRequest}`);
 
     return {
       systemPrompt,

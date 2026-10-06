@@ -28,8 +28,10 @@ import {
   ConversationListModal,
   PersonalityModal,
   ActionConfirmation,
+  ProviderRequestModal,
 } from '../components';
 import { IntegrationsScreen } from './IntegrationsScreen';
+import { getServices } from '../../services/container';
 
 export const HomeScreen: React.FC = () => {
   const {
@@ -52,8 +54,33 @@ export const HomeScreen: React.FC = () => {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isIntegrationsOpen, setIsIntegrationsOpen] = useState(false);
+  const [providerModalVisible, setProviderModalVisible] = useState(false);
+  const [providerModalData, setProviderModalData] = useState<{
+    providerName: string;
+    reason: string;
+    cost: string;
+  } | null>(null);
 
   const flatListRef = useRef<FlatList>(null);
+
+  // Wire provider configuration callback
+  useEffect(() => {
+    const services = getServices();
+    services.conversationService.setProviderConfigCallback(async (decision) => {
+      const providerNameMap: Record<string, string> = {
+        openai_provider: 'OpenAI',
+        anthropic_provider: 'Anthropic',
+        google_gemini_provider: 'Google Gemini',
+      };
+      const providerName = providerNameMap[decision.unconfiguredProviderId || ''] || 'External Provider';
+      setProviderModalData({
+        providerName,
+        reason: decision.explanation || 'This provider offers better capabilities for your request.',
+        cost: '~$0.01',
+      });
+      setProviderModalVisible(true);
+    });
+  }, []);
 
   // Auto-scroll to end on new messages
   useEffect(() => {
@@ -155,6 +182,24 @@ export const HomeScreen: React.FC = () => {
         <IntegrationsScreen
           visible={isIntegrationsOpen}
           onClose={() => setIsIntegrationsOpen(false)}
+        />
+
+        {/* Provider Request Modal */}
+        <ProviderRequestModal
+          visible={providerModalVisible}
+          providerName={providerModalData?.providerName || ''}
+          providerReason={providerModalData?.reason || ''}
+          estimatedCost={providerModalData?.cost || '~$0.01'}
+          onConfigure={() => {
+            setProviderModalVisible(false);
+            setIsIntegrationsOpen(true);
+          }}
+          onFallbackLocal={() => {
+            setProviderModalVisible(false);
+            // Trigger local fallback - for now just close modal
+            // Future: retry with local provider
+          }}
+          onCancel={() => setProviderModalVisible(false)}
         />
       </KeyboardAvoidingView>
     </View>

@@ -1,13 +1,12 @@
 /**
  * llama.cpp Inference Engine for GGUF models
  * 
- * This provides ACTUAL neural network inference using llama.cpp.
+ * This provides ACTUAL neural network inference using llama.cpp via llama.rn v0.9.x.
  * NO FALLBACKS, NO MOCKS - real model inference only.
  */
 
-import { NativeModules, Platform } from 'react-native';
-
-const { LlamaCppModule } = NativeModules;
+import { Platform } from 'react-native';
+import { initLlama } from 'llama.rn';
 
 export interface LlamaCppInferenceOptions {
   maxTokens?: number;
@@ -45,6 +44,7 @@ export class LlamaCppInferenceEngine {
   private modelId: string | null = null;
   private modelPath: string | null = null;
   private loadTimeMs: number = 0;
+  private context: any = null; // LlamaContext from llama.rn
 
   /**
    * Load GGUF model for inference
@@ -62,25 +62,32 @@ export class LlamaCppInferenceEngine {
     }
 
     try {
-      if (!LlamaCppModule) {
-        throw new Error(
-          'llama.cpp native module not available. Please ensure the app is built with native support.'
-        );
-      }
-
-      // Initialize llama.cpp (no-op, but kept for consistency)
-      console.log('Initializing llama.cpp...');
-      await LlamaCppModule.initialize();
-
-      console.log(`Loading GGUF model: ${modelId} from ${modelPath}`);
-      await LlamaCppModule.loadModel(modelPath);
+      console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+      console.log(`📦 LOADING MODEL: ${modelId}`);
+      console.log(`📂 Path: ${modelPath}`);
+      console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+      
+      // Create context with the model using llama.rn v0.9.x API
+      // Use file:// prefix for local files
+      const modelUri = modelPath.startsWith('file://') ? modelPath : `file://${modelPath}`;
+      
+      this.context = await initLlama({
+        model: modelUri,
+        use_mlock: true,
+        n_ctx: 4096, // Increased context for Gemma (was 2048)
+        n_gpu_layers: 32, // GPU acceleration - offload layers to GPU for faster inference
+      });
 
       this.modelLoaded = true;
       this.modelId = modelId;
       this.modelPath = modelPath;
       this.loadTimeMs = Date.now() - startTime;
 
-      console.log(`✓ llama.cpp model loaded successfully in ${this.loadTimeMs}ms`);
+      console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+      console.log(`✅ MODEL LOADED: ${modelId}`);
+      console.log(`⏱️  Load time: ${this.loadTimeMs}ms`);
+      console.log(`🎯 GPU layers: 32 (acceleration enabled)`);
+      console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
       return {
         loaded: true,
@@ -92,9 +99,10 @@ export class LlamaCppInferenceEngine {
       this.modelLoaded = false;
       this.modelId = null;
       this.modelPath = null;
+      this.context = null;
 
       const errorMessage = error instanceof Error ? error.message : 'Unknown error loading model';
-      console.error('✗ Failed to load llama.cpp model:', errorMessage);
+      console.error('✗ Failed to load llama.rn model:', errorMessage);
 
       throw new Error(`Failed to load GGUF model: ${errorMessage}`);
     }
@@ -109,19 +117,20 @@ export class LlamaCppInferenceEngine {
     }
 
     try {
-      if (LlamaCppModule && Platform.OS !== 'web') {
-        await LlamaCppModule.unloadModel();
+      if (this.context && Platform.OS !== 'web') {
+        await this.context.release();
       }
 
-      console.log('✓ llama.cpp model unloaded');
+      console.log('✓ llama.rn model unloaded');
     } catch (error) {
-      console.error('Error unloading llama.cpp model:', error);
+      console.error('Error unloading llama.rn model:', error);
     }
 
     this.modelLoaded = false;
     this.modelId = null;
     this.modelPath = null;
     this.loadTimeMs = 0;
+    this.context = null;
   }
 
   /**
@@ -130,7 +139,7 @@ export class LlamaCppInferenceEngine {
    * NO FALLBACKS - actual inference only
    */
   async infer(prompt: string, options: LlamaCppInferenceOptions = {}): Promise<LlamaCppInferenceResult> {
-    if (!this.modelLoaded) {
+    if (!this.modelLoaded || !this.context) {
       throw new Error(
         'llama.cpp model is not loaded. Please download and load a model first. ' +
         'Go to Settings > Model Management to download a model.'
@@ -153,37 +162,59 @@ export class LlamaCppInferenceEngine {
     };
 
     try {
-      if (!LlamaCppModule || Platform.OS === 'web') {
-        throw new Error('llama.cpp native module not available');
+      if (Platform.OS === 'web') {
+        throw new Error('llama.rn not available on web platform');
       }
 
-      console.log(`Running llama.cpp inference on prompt: "${prompt.substring(0, 50)}..."`);
+      console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+      console.log(`🤖 INFERENCE START`);
+      console.log(`📝 Model: ${this.modelId}`);
+      console.log(`📄 Prompt (first 100 chars): "${prompt.substring(0, 100)}${prompt.length > 100 ? '...' : ''}"`);
+      console.log(`⚙️  Temperature: ${inferenceOptions.temperature}, TopP: ${inferenceOptions.topP}, MaxTokens: ${inferenceOptions.maxTokens}`);
+      console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
-      const result = await LlamaCppModule.infer(
-        prompt,
-        inferenceOptions.maxTokens,
-        inferenceOptions.temperature,
-        inferenceOptions.topK,
-        inferenceOptions.topP
+      // Run completion with llama.rn v0.9.x API
+      const completionResult = await this.context.completion(
+        {
+          prompt,
+          n_predict: inferenceOptions.maxTokens,
+          temperature: inferenceOptions.temperature,
+          top_p: inferenceOptions.topP,
+          top_k: inferenceOptions.topK,
+          repeat_penalty: inferenceOptions.repeatPenalty,
+          stop: inferenceOptions.stopSequences,
+        },
+        (data: any) => {
+          // Progress callback - could be used for streaming in the future
+          // console.log('Token:', data.token);
+        }
       );
 
       const latencyMs = Date.now() - startTime;
-      const tokensPerSecond = parseFloat((result.tokensGenerated / (latencyMs / 1000)).toFixed(1));
+      const tokensGenerated = completionResult.timings?.predicted_n || 0;
+      const tokensPerSecond = parseFloat((tokensGenerated / (latencyMs / 1000)).toFixed(1));
 
-      console.log(`✓ llama.cpp inference completed in ${latencyMs}ms (${tokensPerSecond} tok/s)`);
+      console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+      console.log(`✅ INFERENCE COMPLETE`);
+      console.log(`🤖 Model: ${this.modelId}`);
+      console.log(`⏱️  Latency: ${latencyMs}ms`);
+      console.log(`🎯 Tokens: ${tokensGenerated} tokens @ ${tokensPerSecond} tok/s`);
+      console.log(`📊 Finish reason: ${completionResult.stopped_eos ? 'eos' : 'max_tokens'}`);
+      console.log(`📝 Response (first 200 chars): "${completionResult.text.substring(0, 200)}${completionResult.text.length > 200 ? '...' : ''}"`);
+      console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
       return {
-        text: result.text,
-        tokensGenerated: result.tokensGenerated,
+        text: completionResult.text,
+        tokensGenerated,
         latencyMs,
         tokensPerSecond,
-        finishReason: result.finishReason || 'eos',
+        finishReason: completionResult.stopped_eos ? 'eos' : 'max_tokens',
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown inference error';
-      console.error('✗ llama.cpp inference failed:', errorMessage);
+      console.error('✗ llama.rn inference failed:', errorMessage);
 
-      throw new Error(`llama.cpp inference failed: ${errorMessage}`);
+      throw new Error(`llama.rn inference failed: ${errorMessage}`);
     }
   }
 

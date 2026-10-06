@@ -6,7 +6,7 @@
 
 import { Message } from '../types/conversation';
 import { AIContext } from '../types/context';
-import { LocalModelInfo } from './LocalAIModelRegistry';
+import { LocalModelInfo, ALL_LOCAL_MODELS } from './LocalAIModelRegistry';
 import { QwenModelRuntime, QwenContextBuilder, NetworkGuard } from './qwen';
 
 export type InferenceMode = 'auto' | 'embedded' | 'endpoint';
@@ -35,7 +35,7 @@ export class LocalInferenceEngine {
   private qwenRuntime: QwenModelRuntime = new QwenModelRuntime();
 
   constructor(options: LocalInferenceOptions) {
-    this.activeModel = options.model;
+    this.activeModel = options.model || ALL_LOCAL_MODELS[0];
     this.mode = options.mode;
     this.endpointUrl = options.endpointUrl || 'http://10.0.2.2:11434';
   }
@@ -232,8 +232,24 @@ export class LocalInferenceEngine {
     const lastMessage = messages[messages.length - 1];
     const userInput = lastMessage?.content?.trim() || '';
 
-    // If active model is Qwen, run through real Qwen runtime & tokenizer
-    if (this.activeModel.id.startsWith('qwen')) {
+    // PRE-PROCESSING: Check for math expressions FIRST (before model inference)
+    // This ensures accurate math results even with small models
+    const mathResult = this.tryEvaluateMath(userInput);
+    if (mathResult !== null) {
+      console.log(`🧮 Math expression detected, using built-in evaluator: ${mathResult}`);
+      const inputTokens = Math.max(1, Math.round(userInput.length / 4));
+      const outputTokens = Math.max(1, Math.round(mathResult.length / 4));
+      return {
+        text: mathResult,
+        modelId: `${this.activeModel.id}-math-eval`,
+        modeUsed: 'embedded',
+        inputTokens,
+        outputTokens,
+      };
+    }
+
+    // If active model is Qwen or Gemma, run through real runtime & tokenizer
+    if (this.activeModel.id.startsWith('qwen') || this.activeModel.id.startsWith('gemma') || this.activeModel.id.startsWith('phi') || this.activeModel.id.startsWith('tinyllama') || this.activeModel.id.startsWith('mistral')) {
       if (this.qwenRuntime.getState() === 'UNINITIALIZED') {
         try {
           await this.qwenRuntime.initialize();
@@ -243,12 +259,43 @@ export class LocalInferenceEngine {
       }
 
       if (this.qwenRuntime.getState() === 'READY') {
-        const promptContext = QwenContextBuilder.buildPrompt(
-          messages,
-          context,
-          this.activeModel.name
-        );
+        // Use appropriate context builder based on model architecture
+        let promptContext: { fullPrompt: string };
+        let architecture = 'qwen'; // default
+        
+        if (this.activeModel.id.startsWith('gemma')) {
+          promptContext = this.buildGemmaPrompt(messages, context);
+          architecture = 'gemma2';
+        } else if (this.activeModel.id.startsWith('phi')) {
+          promptContext = this.buildPhiPrompt(messages, context);
+          architecture = 'phi3';
+        } else if (this.activeModel.id.startsWith('tinyllama')) {
+          promptContext = this.buildTinyLlamaPrompt(messages, context);
+          architecture = 'tinyllama';
+        } else if (this.activeModel.id.startsWith('mistral') || this.activeModel.id.startsWith('ministral')) {
+          promptContext = this.buildMistralPrompt(messages, context);
+          architecture = 'mistral';
+        } else {
+          // Qwen and default
+          promptContext = QwenContextBuilder.buildPrompt(messages, context, this.activeModel.name);
+        }
+        
+        console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+        console.log(`🤖 LOCAL INFERENCE ENGINE`);
+        console.log(`📦 Model: ${this.activeModel.name}`);
+        console.log(`🏗️  Architecture: ${architecture.toUpperCase()}`);
+        console.log(`💾 Model ID: ${this.activeModel.id}`);
+        console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+        
         const qwenOut = await this.qwenRuntime.infer(promptContext.fullPrompt);
+        
+        console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+        console.log(`✅ LOCAL INFERENCE COMPLETE`);
+        console.log(`🤖 Model: ${this.activeModel.name}`);
+        console.log(`🏗️  Architecture: ${architecture.toUpperCase()}`);
+        console.log(`📊 Performance: ${qwenOut.tokensPerSec} tok/s`);
+        console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+        
         return {
           text: qwenOut.text,
           modelId: this.activeModel.id,
@@ -481,16 +528,23 @@ export class LocalInferenceEngine {
 
   /**
    * Try to evaluate a math expression from user input.
-   * Handles: "2+2", "100/5", "what is 15*3", "two plus two", etc.
+   * Handles: "2+2", "100/5", "what is 15*3", "3x5+8", "two plus two", etc.
+   * Also handles typos: "what us" → "what is"
    */
   private tryEvaluateMath(input: string): string | null {
     const cleaned = input.replace(/[?!.]+$/, '').trim();
 
-    // Direct arithmetic: "2+2", "100 / 5", "what is 15 * 3", etc.
-    const mathExpr = cleaned
+    // Fix common typos: "what us" → "what is"
+    const fixedInput = cleaned.replace(/\bwhat\s+us\b/gi, 'what is');
+
+    // Direct arithmetic: "2+2", "100 / 5", "what is 15 * 3", "3x5+8", etc.
+    let mathExpr = fixedInput
       .replace(/^(?:what\s+is|what's|whats|calculate|compute|solve|eval)\s+/i, '')
       .replace(/\s+/g, '')
       .trim();
+
+    // Replace 'x' with '*' for multiplication (e.g., "3x5" → "3*5")
+    mathExpr = mathExpr.replace(/(\d+)x(\d+)/gi, '$1*$2');
 
     // Check if it looks like a math expression (digits and operators)
     if (/^[\d+\-*/().%^ ]+$/.test(mathExpr) && /\d/.test(mathExpr) && /[+\-*/^%]/.test(mathExpr)) {
@@ -505,7 +559,7 @@ export class LocalInferenceEngine {
             const display = Number.isInteger(result)
               ? result.toString()
               : result.toFixed(6).replace(/\.?0+$/, '');
-            return `${cleaned.replace(/\s/g, '')} = **${display}**`;
+            return `${mathExpr} = **${display}**`;
           }
         }
       } catch {
@@ -522,7 +576,7 @@ export class LocalInferenceEngine {
       thirty: 30, forty: 40, fifty: 50, hundred: 100, thousand: 1000,
     };
 
-    const wordMath = cleaned.toLowerCase().match(
+    const wordMath = fixedInput.toLowerCase().match(
       /^(?:what(?:'s| is)\s+)?(\w+)\s+(plus|minus|times|multiplied by|divided by|over)\s+(\w+)$/i
     );
     if (wordMath) {
@@ -647,5 +701,143 @@ export class LocalInferenceEngine {
     }
 
     return null;
+  }
+
+  /**
+   * Build Gemma 2 formatted prompt with conversation history
+   * Gemma 2 requires <bos> token and proper formatting
+   */
+  private buildGemmaPrompt(
+    messages: Message[],
+    context?: AIContext
+  ): { fullPrompt: string } {
+    // Gemma 2 multi-turn format:
+    // <bos><start_of_turn>user\n{msg1}<end_of_turn>\n<start_of_turn>model\n{response1}<end_of_turn>\n<start_of_turn>user\n{msg2}<end_of_turn>\n<start_of_turn>model\n
+    
+    let prompt = '<bos>';
+    
+    // Add conversation history (last 4 messages to keep context manageable)
+    const recentMessages = messages.slice(-4);
+    
+    for (const msg of recentMessages) {
+      if (msg.role === 'user') {
+        prompt += `<start_of_turn>user\n${msg.content}<end_of_turn>\n`;
+      } else if (msg.role === 'assistant') {
+        prompt += `<start_of_turn>model\n${msg.content}<end_of_turn>\n`;
+      }
+    }
+    
+    // Add the start token for the assistant's next response
+    prompt += '<start_of_turn>model\n';
+    
+    return { fullPrompt: prompt };
+  }
+
+  /**
+   * Build Phi-3 formatted prompt with conversation history
+   * Phi-3 uses special tokens for chat formatting
+   */
+  private buildPhiPrompt(
+    messages: Message[],
+    context?: AIContext
+  ): { fullPrompt: string } {
+    const systemPrompt = context?.systemPrompt || 'You are Saturday, a helpful AI assistant.';
+    
+    // Phi-3 multi-turn chat template
+    let prompt = `<|system|>\n${systemPrompt}<|end|>\n`;
+    
+    // Add conversation history (last 4 messages)
+    const recentMessages = messages.slice(-4);
+    
+    for (const msg of recentMessages) {
+      if (msg.role === 'user') {
+        prompt += `<|user|>\n${msg.content}<|end|>\n`;
+      } else if (msg.role === 'assistant') {
+        prompt += `<|assistant|>\n${msg.content}<|end|>\n`;
+      }
+    }
+    
+    // Add the start token for the assistant's next response
+    prompt += '<|assistant|>\n';
+    
+    return { fullPrompt: prompt };
+  }
+
+  /**
+   * Build TinyLlama formatted prompt with conversation history
+   * TinyLlama uses ChatML format (like GPT-3.5)
+   */
+  private buildTinyLlamaPrompt(
+    messages: Message[],
+    context?: AIContext
+  ): { fullPrompt: string } {
+    const systemPrompt = context?.systemPrompt || 'You are Saturday, a helpful AI assistant.';
+    
+    // ChatML multi-turn format
+    let prompt = `<|im_start|>system\n${systemPrompt}<|im_end|>\n`;
+    
+    // Add conversation history (last 4 messages)
+    const recentMessages = messages.slice(-4);
+    
+    for (const msg of recentMessages) {
+      if (msg.role === 'user') {
+        prompt += `<|im_start|>user\n${msg.content}<|im_end|>\n`;
+      } else if (msg.role === 'assistant') {
+        prompt += `<|im_start|>assistant\n${msg.content}<|im_end|>\n`;
+      }
+    }
+    
+    // Add the start token for the assistant's next response
+    prompt += '<|im_start|>assistant\n';
+    
+    return { fullPrompt: prompt };
+  }
+
+  /**
+   * Build Mistral formatted prompt with conversation history
+   * Mistral uses [INST] tags for instruction formatting
+   */
+  private buildMistralPrompt(
+    messages: Message[],
+    context?: AIContext
+  ): { fullPrompt: string } {
+    const systemPrompt = context?.systemPrompt || 'You are Saturday, a helpful AI assistant.';
+    
+    // Mistral/Ministral multi-turn format: <s>[INST] {system}\n{user1} [/INST] {response1}</s> [INST] {user2} [/INST]
+    let prompt = '<s>';
+    
+    // Add conversation history (last 3 turns for Mistral - it uses more tokens per message)
+    const recentMessages = messages.slice(-3);
+    
+    let isFirstTurn = true;
+    let currentUserMsg = '';
+    
+    for (let i = 0; i < recentMessages.length; i++) {
+      const msg = recentMessages[i];
+      
+      if (msg.role === 'user') {
+        currentUserMsg = msg.content;
+        
+        if (isFirstTurn) {
+          // First turn includes system prompt
+          prompt += `[INST] ${systemPrompt}\n\n${currentUserMsg} [/INST]`;
+          isFirstTurn = false;
+        } else {
+          // Subsequent turns
+          prompt += ` [INST] ${currentUserMsg} [/INST]`;
+        }
+      } else if (msg.role === 'assistant' && currentUserMsg) {
+        // Add assistant response and close turn
+        prompt += ` ${msg.content}</s>`;
+        currentUserMsg = '';
+      }
+    }
+    
+    // If the last message was from user and we haven't closed it yet, just leave it open for completion
+    if (recentMessages[recentMessages.length - 1]?.role === 'user' && !prompt.endsWith('[/INST]')) {
+      // Already formatted above
+    }
+    
+    return { fullPrompt: prompt };
   }
 }

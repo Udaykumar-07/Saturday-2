@@ -154,11 +154,51 @@ export const ModelManagementScreen: React.FC = () => {
 
     console.log(`Rendering model card for ${config.modelId}, status: ${status}`);
 
+    // Determine quality rating and RAM requirement
+    const getModelMetadata = (modelId: string) => {
+      // Quality ratings: Excellent (5) > Great (4) > Good (3) > Fair (2)
+      // RAM: Minimum RAM required for smooth inference
+      
+      if (modelId.includes('ministral-8b')) return { quality: '⭐⭐⭐⭐⭐', qualityText: 'Excellent', ram: '6GB+', recommended: false };
+      if (modelId.includes('mistral-7b')) return { quality: '⭐⭐⭐⭐⭐', qualityText: 'Excellent', ram: '6GB+', recommended: false };
+      if (modelId.includes('gemma-2-9b')) return { quality: '⭐⭐⭐⭐⭐', qualityText: 'Excellent', ram: '6GB+', recommended: false };
+      if (modelId.includes('phi-3.5')) return { quality: '⭐⭐⭐⭐', qualityText: 'Great', ram: '4GB+', recommended: false };
+      if (modelId.includes('phi-3')) return { quality: '⭐⭐⭐⭐', qualityText: 'Great', ram: '4GB+', recommended: false };
+      if (modelId.includes('gemma-2-2b-instruct-int8')) return { quality: '⭐⭐⭐⭐', qualityText: 'Great', ram: '4GB+', recommended: false };
+      if (modelId.includes('gemma-2-2b-instruct-int4')) return { quality: '⭐⭐⭐⭐', qualityText: 'Great', ram: '4GB', recommended: true };
+      if (modelId.includes('qwen2.5-1.5b')) return { quality: '⭐⭐⭐', qualityText: 'Good', ram: '3GB+', recommended: false };
+      if (modelId.includes('tinyllama')) return { quality: '⭐⭐⭐', qualityText: 'Good', ram: '2GB+', recommended: false };
+      if (modelId.includes('qwen2.5-0.5b')) return { quality: '⭐⭐', qualityText: 'Fair', ram: '2GB', recommended: false };
+      return { quality: '⭐⭐⭐', qualityText: 'Good', ram: '4GB', recommended: false };
+    };
+
+    const metadata = getModelMetadata(config.modelId);
+
     return (
       <View key={config.modelId} style={styles.modelCard}>
         <View style={styles.modelHeader}>
           <View style={styles.modelTitleRow}>
             <Text style={styles.modelName}>{config.name}</Text>
+            {metadata.recommended && (
+              <View style={styles.recommendedBadge}>
+                <Text style={styles.recommendedText}>RECOMMENDED</Text>
+              </View>
+            )}
+          </View>
+
+          {/* Quality and RAM Requirements */}
+          <View style={styles.metadataRow}>
+            <View style={styles.qualityContainer}>
+              <Text style={styles.qualityStars}>{metadata.quality}</Text>
+              <Text style={styles.qualityText}>{metadata.qualityText} Quality</Text>
+            </View>
+            <View style={styles.ramContainer}>
+              <Text style={styles.ramText}>💾 {metadata.ram} RAM</Text>
+            </View>
+          </View>
+
+          {/* Status Badge */}
+          <View style={styles.statusRow}>
             <View
               style={[
                 styles.statusBadge,
@@ -179,9 +219,9 @@ export const ModelManagementScreen: React.FC = () => {
           </View>
 
           <View style={styles.modelDetails}>
-            <Text style={styles.modelDetail}>Size: {formatBytes(config.sizeBytes)}</Text>
-            <Text style={styles.modelDetail}>Quantization: {config.quantization}</Text>
-            <Text style={styles.modelDetail}>Version: {config.version}</Text>
+            <Text style={styles.modelDetail}>📦 {formatBytes(config.sizeBytes)}</Text>
+            <Text style={styles.modelDetail}>🔧 {config.quantization}</Text>
+            <Text style={styles.modelDetail}>v{config.version}</Text>
           </View>
         </View>
 
@@ -200,7 +240,7 @@ export const ModelManagementScreen: React.FC = () => {
         {/* Downloaded Info */}
         {downloadedModel && downloadedModel.downloadedAt && (
           <Text style={styles.downloadedInfo}>
-            Downloaded: {new Date(downloadedModel.downloadedAt).toLocaleDateString()}
+            ✓ Downloaded: {new Date(downloadedModel.downloadedAt).toLocaleDateString()}
           </Text>
         )}
 
@@ -208,23 +248,23 @@ export const ModelManagementScreen: React.FC = () => {
         <View style={styles.actionRow}>
           {status === 'not_downloaded' && !progress && (
             <TouchableOpacity style={styles.downloadButton} onPress={() => handleDownload(config.modelId)}>
-              <Text style={styles.downloadButtonText}>Download</Text>
+              <Text style={styles.downloadButtonText}>⬇ Download</Text>
             </TouchableOpacity>
           )}
 
           {status === 'downloading' && progress && (
             <TouchableOpacity style={styles.cancelButton} onPress={() => handleCancelDownload(config.modelId)}>
-              <Text style={styles.cancelButtonText}>Cancel</Text>
+              <Text style={styles.cancelButtonText}>✕ Cancel</Text>
             </TouchableOpacity>
           )}
 
           {status === 'downloaded' && (
             <>
               <TouchableOpacity style={styles.verifyButton} onPress={() => Alert.alert('Verified', 'Model is ready')}>
-                <Text style={styles.verifyButtonText}>Verify</Text>
+                <Text style={styles.verifyButtonText}>✓ Verify</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.deleteButton} onPress={() => handleDelete(config.modelId, config.name)}>
-                <Text style={styles.deleteButtonText}>Delete</Text>
+                <Text style={styles.deleteButtonText}>🗑 Delete</Text>
               </TouchableOpacity>
             </>
           )}
@@ -346,7 +386,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 12,
   },
   modelName: {
     ...typography.body,
@@ -354,6 +394,60 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.textPrimary,
     flex: 1,
+  },
+  recommendedBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    backgroundColor: colors.primaryBackground,
+    borderWidth: 1,
+    borderColor: colors.primaryBorder,
+    marginLeft: 8,
+  },
+  recommendedText: {
+    ...typography.caption,
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.primary,
+    letterSpacing: 0.5,
+  },
+  metadataRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+    gap: 12,
+  },
+  qualityContainer: {
+    flex: 1,
+  },
+  qualityStars: {
+    fontSize: 14,
+    lineHeight: 18,
+    marginBottom: 2,
+  },
+  qualityText: {
+    ...typography.caption,
+    fontSize: 12,
+    color: colors.textSecondary,
+    fontWeight: '500',
+  },
+  ramContainer: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: colors.surfaceHover,
+    borderWidth: 1,
+    borderColor: colors.surfaceBorder,
+  },
+  ramText: {
+    ...typography.caption,
+    fontSize: 12,
+    color: colors.textPrimary,
+    fontWeight: '600',
+  },
+  statusRow: {
+    marginBottom: 8,
   },
   statusBadge: {
     paddingHorizontal: 10,

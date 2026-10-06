@@ -10,10 +10,12 @@
     "web": "expo start --web",
     "test": "jest",
     "lint": "expo lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "postinstall": "node -e \"const fs = require('fs'); const p = 'node_modules/onnxruntime-react-native/android/build.gradle'; if (fs.existsSync(p)) { let c = fs.readFileSync(p, 'utf8'); c = c.replace(/latest\\.integration/g, '1.24.3'); fs.writeFileSync(p, c); }\""
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "1.23.1",
+    "@react-native-community/netinfo": "^12.0.1",
     "expo": "~51.0.31",
     "expo-asset": "~10.0.10",
     "expo-auth-session": "~5.5.2",
@@ -29,6 +31,8 @@
     "expo-secure-store": "~13.0.2",
     "expo-status-bar": "~1.12.1",
     "expo-web-browser": "~13.0.3",
+    "llama.rn": "^0.9.3",
+    "onnxruntime-react-native": "^1.24.3",
     "react": "18.2.0",
     "react-native": "0.74.5",
     "react-native-gesture-handler": "~2.20.2",

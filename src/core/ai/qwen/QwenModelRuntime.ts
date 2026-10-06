@@ -135,7 +135,7 @@ export class QwenModelRuntime {
         throw new Error('Model path not found');
       }
 
-      // 4. Load the ONNX model
+      // 4. Load the GGUF model via llama.cpp
       console.log(`Loading model from: ${modelInfo.localPath}`);
       const loadStatus = await this.inferenceEngine.loadModel(modelInfo.localPath, this.modelId);
 
@@ -267,25 +267,92 @@ export class QwenModelRuntime {
     const start = Date.now();
 
     try {
-      // ACTUAL ONNX INFERENCE - NO FALLBACKS
+      // ACTUAL LLAMA.CPP INFERENCE - NO FALLBACKS
+      console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+      console.log(`🧠 QWEN RUNTIME INFERENCE`);
+      console.log(`📝 Model: ${this.modelId} (${this.displayName})`);
+      console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+      
+      // Determine stop sequences based on model
+      let stopSequences = ['</s>', '<|im_end|>', '<|endoftext|>'];
+      let repeatPenalty = 1.3;
+      let maxTokens = 256;
+      
+      if (this.modelId.includes('gemma')) {
+        stopSequences = ['<end_of_turn>', '<start_of_turn>', 'model\n', '\nmodel', '</s>', '<eos>'];
+        repeatPenalty = 1.5; // Higher penalty to prevent repetition
+        maxTokens = 150; // Shorter responses to prevent loops
+      } else if (this.modelId.includes('phi')) {
+        stopSequences = ['<|end|>', '<|system|>', '<|user|>', '<|assistant|>'];
+        repeatPenalty = 1.4;
+      } else if (this.modelId.includes('tinyllama')) {
+        stopSequences = ['<|im_end|>', '<|im_start|>'];
+        repeatPenalty = 1.4;
+      } else if (this.modelId.includes('mistral')) {
+        stopSequences = ['</s>', '[INST]', '[/INST]'];
+        repeatPenalty = 1.3;
+      }
+      
+      console.log(`⚙️  Stop sequences: ${stopSequences.join(', ')}`);
+      console.log(`⚙️  Repeat penalty: ${repeatPenalty}`);
+      
       const result = await this.inferenceEngine.infer(prompt, {
-        maxTokens: options.maxTokens || 512,
-        temperature: options.temperature || 0.7,
-        topP: options.topP || 0.9,
+        maxTokens: options.maxTokens || maxTokens,
+        temperature: options.temperature || 0.7, // Lower temperature for more focused responses
+        topP: options.topP || 0.9, // Lower topP for less randomness
         topK: options.topK || 40,
-        repeatPenalty: options.repeatPenalty || 1.1,
+        repeatPenalty: options.repeatPenalty || repeatPenalty,
+        stopSequences: stopSequences,
       });
 
       const inputTokenCount = this.tokenizer.encode(prompt).length;
 
+      // Log raw output for debugging
+      console.log(`📝 Raw model output (first 200 chars): "${result.text.substring(0, 200)}"`);
+      console.log(`📝 Raw output length: ${result.text.length} chars`);
+      console.log(`📝 Full raw output: "${result.text}"`);
+
+      // MINIMAL cleaning - only remove actual template tokens, preserve ALL text
+      let cleanedText = result.text.trim();
+      
+      // Only remove these exact template tokens (using literal string replacement, not regex)
+      const exactTokensToRemove = [
+        '<end_of_turn>',
+        '<start_of_turn>',
+        '<|end|>',
+        '<|system|>',
+        '<|user|>',
+        '<|assistant|>',
+        '<|im_end|>',
+        '<|im_start|>',
+        '</s>',
+        '<eos>',
+        '<bos>',
+        '[INST]',
+        '[/INST]',
+      ];
+      
+      // Use split and join to avoid regex issues
+      for (const token of exactTokensToRemove) {
+        cleanedText = cleanedText.split(token).join('');
+      }
+      
+      // Clean up extra whitespace only
+      cleanedText = cleanedText.replace(/\s+/g, ' ').trim();
+
+      console.log(`📝 Cleaned response (${cleanedText.length} chars): "${cleanedText}"`);
+      console.log(`📝 Character comparison:`);
+      console.log(`   Raw first 50: "${result.text.substring(0, 50)}"`);
+      console.log(`   Cleaned first 50: "${cleanedText.substring(0, 50)}"`);
+
       return {
-        text: result.text,
+        text: cleanedText,
         inputTokenCount,
         outputTokenCount: result.tokensGenerated,
         latencyMs: result.latencyMs,
-        timeToFirstTokenMs: 45, // Estimated from profiling
+        timeToFirstTokenMs: 45,
         tokensPerSec: result.tokensPerSecond,
-        finishReason: result.finishReason,
+        finishReason: result.finishReason === 'max_tokens' ? 'length' : (result.finishReason === 'stop_sequence' ? 'stop' : 'eos'),
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown inference error';
@@ -299,7 +366,7 @@ export class QwenModelRuntime {
   /**
    * Get inference engine instance
    */
-  getInferenceEngine(): ONNXInferenceEngine {
+  getInferenceEngine(): LlamaCppInferenceEngine {
     return this.inferenceEngine;
   }
 

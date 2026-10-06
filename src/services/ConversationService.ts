@@ -18,12 +18,15 @@ import { ExternalService } from './ExternalService';
 import { MemoryService } from './MemoryService';
 import { MemoryExtractionService, MemoryRetrievalService } from '../core/memory';
 import { ModelIdentityService, QwenOrchestrator, NetworkGuard } from '../core/ai/qwen';
+import { RoutingDecision } from '../core/types/intelligence';
 
 export class ConversationService {
   private memoryExtraction: MemoryExtractionService = new MemoryExtractionService();
   private memoryRetrieval?: MemoryRetrievalService;
   private modelIdentity: ModelIdentityService;
   private qwenOrchestrator?: QwenOrchestrator;
+  private messageIdCounter: number = 0;
+  private providerConfigCallback: ((decision: RoutingDecision) => Promise<void>) | null = null;
 
   constructor(
     private repository: ConversationRepository,
@@ -54,6 +57,22 @@ export class ConversationService {
         this.externalService
       );
     }
+  }
+
+  /**
+   * Generate a unique message ID
+   */
+  private generateMessageId(): string {
+    this.messageIdCounter++;
+    return `msg_${Date.now()}_${this.messageIdCounter}_${Math.random().toString(36).substring(2, 9)}`;
+  }
+
+  /**
+   * Set a callback to handle provider configuration requests.
+   * The callback will be invoked when routing requires an unconfigured provider.
+   */
+  setProviderConfigCallback(cb: (decision: RoutingDecision) => Promise<void>): void {
+    this.providerConfigCallback = cb;
   }
 
   /** Create a new conversation. */
@@ -96,7 +115,7 @@ export class ConversationService {
   ): Promise<{ userMessage: Message; assistantMessage: Message }> {
     // 1. Create and persist user message
     const userMessage: Message = {
-      id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+      id: this.generateMessageId(),
       role: 'user',
       content,
       timestamp: Date.now(),
@@ -107,8 +126,10 @@ export class ConversationService {
       userMessage
     );
 
-    // 2. Classify intent via TaskUnderstandingService (if available)
-    const intent = this.taskUnderstanding?.classify(content);
+    // 2. Classify intent via TaskUnderstandingService (Laya ML → keyword fallback)
+    const intent = this.taskUnderstanding
+      ? await this.taskUnderstanding.classifyAsync(content)
+      : undefined;
 
     // ── 2.1 MEMORY DELETE ──
     // e.g. "Forget my name", "Delete my name"
@@ -118,7 +139,7 @@ export class ConversationService {
         await this.personalityService.updateProfile({ userName: undefined });
       }
       const assistantMessage: Message = {
-        id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+        id: this.generateMessageId(),
         role: 'assistant',
         content: "I've forgotten your name.",
         timestamp: Date.now(),
@@ -138,7 +159,7 @@ export class ConversationService {
     ) {
       const result = await this.memoryRetrieval.answerQuery(content);
       const assistantMessage: Message = {
-        id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+        id: this.generateMessageId(),
         role: 'assistant',
         content: result.answer,
         timestamp: Date.now(),
@@ -158,7 +179,7 @@ export class ConversationService {
     // e.g. "Which model are you?", "What model is this?"
     if (this.modelIdentity.isModelIdentityQuery(content)) {
       const assistantMessage: Message = {
-        id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+        id: this.generateMessageId(),
         role: 'assistant',
         content: this.modelIdentity.getIdentityResponse(),
         timestamp: Date.now(),
@@ -181,7 +202,7 @@ export class ConversationService {
         content.toLowerCase().includes('latest news'))
     ) {
       const assistantMessage: Message = {
-        id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+        id: this.generateMessageId(),
         role: 'assistant',
         content:
           "I need an internet connection to fetch the latest AI news. Currently, network connectivity is unavailable in offline mode. Your local on-device AI features remain fully available.",
@@ -232,7 +253,7 @@ export class ConversationService {
           ))
       ) {
         const assistantMessage: Message = {
-          id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+          id: this.generateMessageId(),
           role: 'assistant',
           content: memorySavedAcknowledgment,
           timestamp: Date.now(),
@@ -251,9 +272,13 @@ export class ConversationService {
       const plan = this.actionService.planFromInput(content);
       if (plan && plan.steps.length > 0) {
         const { results, allSucceeded } = await this.actionService.handlePlan(plan);
+          const customData = results
+            .slice()
+            .reverse()
+            .find((r) => r.data && typeof (r.data as any).message === 'string')?.data as any;
           const actionSummary = allSucceeded
-            ? `✓ ${plan.description}`
-            : `Action failed: ${results.find((r) => !r.success)?.error || 'Unknown error'}`;
+            ? (customData?.message || `✓ ${plan.description}`)
+            : `I couldn't complete that action: ${results.find((r) => !r.success)?.error || 'Unknown error'}`;
 
           const assistantMessage: Message = {
             id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
@@ -357,7 +382,7 @@ export class ConversationService {
         }
 
         const assistantMessage: Message = {
-          id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+          id: this.generateMessageId(),
           role: 'assistant',
           content: replyContent,
           timestamp: Date.now(),
@@ -385,10 +410,32 @@ export class ConversationService {
       const routingDecision = await this.router.route();
       providerId = routingDecision.providerId;
 
+      // Check if provider requires configuration (Phase 4 intelligence routing)
+      const extendedDecision = routingDecision as any;
+      if (extendedDecision.requiresConfiguration && this.providerConfigCallback) {
+        await this.providerConfigCallback(extendedDecision);
+        // Return a message indicating configuration is needed
+        const assistantMessage: Message = {
+          id: this.generateMessageId(),
+          role: 'assistant',
+          content: `I'd like to use ${extendedDecision.unconfiguredProviderId || 'an external provider'} for this, but it needs configuration first. Please set it up in Settings.`,
+          timestamp: Date.now(),
+          metadata: { providerId: 'routing-engine', requiresConfig: true },
+        };
+        conversation = await this.repository.appendMessage(conversationId, assistantMessage);
+        return { userMessage, assistantMessage };
+      }
+
       const provider = this.registry.getProvider(routingDecision.providerId);
       if (!provider) {
         throw new AIProviderUnavailableError();
       }
+
+      console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+      console.log(`💬 USER MESSAGE RECEIVED`);
+      console.log(`📝 Content: "${content.substring(0, 100)}${content.length > 100 ? '...' : ''}"`);
+      console.log(`🤖 Routing to provider: ${providerId}`);
+      console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
       // 4. Build request
       const request: AIRequest = {
@@ -405,6 +452,18 @@ export class ConversationService {
 
       assistantContent = response.content;
       providerId = response.providerId;
+      
+      // Add provider attribution for external providers
+      if (['openai_provider', 'anthropic_provider', 'google_gemini_provider'].includes(providerId)) {
+        const providerDisplayName = response.metadata?.providerDisplayName || providerId;
+        assistantContent += `\n\n_Powered by ${providerDisplayName}_`;
+      }
+      
+      console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+      console.log(`✅ RESPONSE GENERATED`);
+      console.log(`🤖 Provider: ${providerId}`);
+      console.log(`📝 Response length: ${assistantContent.length} characters`);
+      console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
     } catch (error) {
       if (error instanceof SaturdayError) {
         assistantContent = this.getErrorMessage(error);
@@ -416,7 +475,7 @@ export class ConversationService {
 
     // 6. Create and persist assistant message
     const assistantMessage: Message = {
-      id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+      id: this.generateMessageId(),
       role: 'assistant',
       content: assistantContent,
       timestamp: Date.now(),

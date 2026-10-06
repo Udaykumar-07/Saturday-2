@@ -42,4 +42,11 @@ export const colors = {
   userBubble: '#1C1C20',
   userBubbleBorder: '#2E2E34',
   assistantBubble: 'transparent',
+
+  // Convenience aliases for UI components
+  primary: '#F4F4F5',
+  primaryBackground: 'rgba(255, 255, 255, 0.08)',
+  primaryBorder: '#3F3F46',
+  successBackground: 'rgba(16, 185, 129, 0.12)',
+  successBorder: '#065F46',
 };

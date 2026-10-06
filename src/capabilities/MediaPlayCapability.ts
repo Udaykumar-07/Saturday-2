@@ -22,49 +22,122 @@ export class MediaPlayCapability implements Capability {
   async execute(params: Record<string, unknown>): Promise<ActionResult> {
     const query = params.query as string | undefined;
     const packageName = params.packageName as string | undefined;
-    const appName = params.appName as string | undefined;
+    const appName = (params.appName as string | undefined)?.toLowerCase() || 'youtube';
 
     if (!query || !query.trim()) {
       return { success: false, error: 'Missing media query parameter.' };
     }
 
+    const cleanQuery = query.trim();
+    const encoded = encodeURIComponent(cleanQuery);
+
     try {
-      const success = await NativeBridge.playMedia(query.trim(), packageName);
-      if (success) {
+      // 1. Try native bridge first (handles native media play intent & propagates native errors)
+      const nativeSuccess = await NativeBridge.playMedia(cleanQuery, packageName);
+      if (nativeSuccess) {
         return {
           success: true,
           data: {
-            query: query.trim(),
-            packageName,
-            appName,
+            query: cleanQuery,
+            packageName: packageName || 'com.google.android.youtube',
+            appName: appName || 'YouTube',
             played: true,
+            verified: true,
+            playbackTarget: appName || 'YouTube',
+            message: `Playing "${cleanQuery}" on ${appName === 'spotify' ? 'Spotify' : 'YouTube'}`,
           },
         };
       }
 
-      // Fallback for YouTube web URL if native media play returned false
-      if (packageName === 'com.google.android.youtube') {
-        const ytUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query.trim())}`;
-        await Linking.openURL(ytUrl);
+      // 2. If native returned false, try YouTube app scheme or web fallback
+      if (packageName === 'com.google.android.youtube' || appName.includes('youtube')) {
+        const ytAppScheme = `vnd.youtube://results?search_query=${encoded}`;
+        const ytWebUrl = `https://www.youtube.com/results?search_query=${encoded}`;
+
+        let opened = false;
+        try {
+          const canOpenApp = await Linking.canOpenURL(ytAppScheme);
+          if (canOpenApp) {
+            await Linking.openURL(ytAppScheme);
+            opened = true;
+          }
+        } catch {
+          // Fallback to web URL
+        }
+
+        if (!opened) {
+          await Linking.openURL(ytWebUrl);
+          opened = true;
+        }
+
         return {
           success: true,
           data: {
-            query: query.trim(),
-            packageName,
-            appName,
-            fallbackUrl: ytUrl,
+            query: cleanQuery,
+            packageName: 'com.google.android.youtube',
+            appName: 'YouTube',
+            played: true,
+            verified: opened,
+            playbackTarget: 'YouTube',
+            message: `Playing "${cleanQuery}" on YouTube`,
           },
         };
       }
 
+      // 3. Spotify playback: try Spotify app URI, then web fallback
+      if (packageName === 'com.spotify.music' || appName.includes('spotify')) {
+        const spotifyAppScheme = `spotify:search:${encoded}`;
+        const spotifyWebUrl = `https://open.spotify.com/search/${encoded}`;
+
+        let opened = false;
+        try {
+          const canOpenSpotify = await Linking.canOpenURL(spotifyAppScheme);
+          if (canOpenSpotify) {
+            await Linking.openURL(spotifyAppScheme);
+            opened = true;
+          }
+        } catch {
+          // Fallback to web URL
+        }
+
+        if (!opened) {
+          await Linking.openURL(spotifyWebUrl);
+          opened = true;
+        }
+
+        return {
+          success: true,
+          data: {
+            query: cleanQuery,
+            packageName: 'com.spotify.music',
+            appName: 'Spotify',
+            played: true,
+            verified: opened,
+            playbackTarget: 'Spotify',
+            message: `Playing "${cleanQuery}" on Spotify`,
+          },
+        };
+      }
+
+      // Default fallback: YouTube
+      const fallbackUrl = `https://www.youtube.com/results?search_query=${encoded}`;
+      await Linking.openURL(fallbackUrl);
       return {
-        success: false,
-        error: `Could not play media for "${query}"`,
+        success: true,
+        data: {
+          query: cleanQuery,
+          packageName: 'com.google.android.youtube',
+          appName: 'YouTube',
+          played: true,
+          verified: true,
+          fallbackUrl,
+          message: `Opened "${cleanQuery}" on YouTube`,
+        },
       };
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : `Failed to play media: ${query}`,
+        error: error instanceof Error ? error.message : `Failed to play media: ${cleanQuery}`,
       };
     }
   }

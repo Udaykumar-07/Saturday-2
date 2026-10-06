@@ -422,6 +422,10 @@ export interface RoutingDecision {
   requiresAuthentication: boolean;
   /** Human-readable explanation */
   explanation: string;
+  /** Whether provider configuration is required */
+  requiresConfiguration?: boolean;
+  /** Provider ID that requires configuration */
+  unconfiguredProviderId?: string;
 }
 
 /**

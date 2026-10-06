@@ -17,13 +17,15 @@ import { IntelligenceRegistry } from '../registry/IntelligenceRegistry';
 import { HardConstraintFilter } from './HardConstraintFilter';
 import { ProviderEvaluationService } from './ProviderEvaluationService';
 import { BenchmarkStore } from '../benchmarks/BenchmarkStore';
+import { CredentialStore } from '../../core/external/authentication/CredentialStore';
 
 export class RoutingDecisionEngine {
   constructor(
     private registry: IntelligenceRegistry,
     private hardConstraintFilter: HardConstraintFilter,
     private evaluationService: ProviderEvaluationService,
-    private benchmarkStore: BenchmarkStore
+    private benchmarkStore: BenchmarkStore,
+    private credentialStore: CredentialStore
   ) {}
 
   /**
@@ -85,7 +87,37 @@ export class RoutingDecisionEngine {
     const requiresAuthentication =
       requirements.requiresAuthentication || topProvider.id.includes('gmail');
 
-    // 7. Human-readable explanation
+    // 7. Check provider availability (credentials configured)
+    if (['openai_provider', 'anthropic_provider', 'google_gemini_provider'].includes(topProvider.id)) {
+      const available = await this.checkProviderAvailability(topProvider.id);
+      if (!available) {
+        const providerName = topProvider.name;
+        return {
+          selectedProvider: topProvider.id,
+          executionTarget,
+          requiredCapabilities: requirements.capabilities || [],
+          rejectedCandidates: rejected,
+          decisionFactors: {
+            capabilityMatch: topCandidateEval.capabilityMatch,
+            overallScore: topCandidateEval.overallScore,
+            reliability: topCandidateEval.reliability,
+            latency: topCandidateEval.latency,
+            cost: topCandidateEval.cost,
+            privacy: topCandidateEval.privacy,
+          },
+          fallbackProvider,
+          confidence: topCandidateEval.overallScore,
+          dataFreshness: freshness,
+          requiresConfirmation,
+          requiresAuthentication,
+          requiresConfiguration: true,
+          unconfiguredProviderId: topProvider.id,
+          explanation: `${providerName} requires configuration before use.`,
+        };
+      }
+    }
+
+    // 8. Human-readable explanation
     const explanation = this.generateExplanation(
       topProvider,
       executionTarget,
@@ -112,6 +144,38 @@ export class RoutingDecisionEngine {
       requiresAuthentication,
       explanation,
     };
+  }
+
+  /**
+   * Check if a provider is available (has credentials configured).
+   */
+  async checkProviderAvailability(providerId: string): Promise<boolean> {
+    if (providerId === 'openai_provider' || providerId === 'anthropic_provider' || providerId === 'google_gemini_provider') {
+      return this.credentialStore.has(providerId);
+    }
+    return true;
+  }
+
+  /**
+   * Estimate cost for a given task and provider.
+   */
+  estimateCost(requirements: TaskRequirements, providerId: string): number {
+    const provider = this.registry.getProvider(providerId);
+    if (!provider) return 0;
+
+    const costProfile = provider.costProfile;
+    if (!costProfile.inputCostPer1kTokens) return 0;
+
+    // Rough estimate: assume 500 input tokens and 500 output tokens
+    const estimatedInputTokens = 500;
+    const estimatedOutputTokens = 500;
+
+    const inputCost = (estimatedInputTokens / 1000) * costProfile.inputCostPer1kTokens;
+    const outputCost = costProfile.outputCostPer1kTokens
+      ? (estimatedOutputTokens / 1000) * costProfile.outputCostPer1kTokens
+      : 0;
+
+    return inputCost + outputCost;
   }
 
   /**
