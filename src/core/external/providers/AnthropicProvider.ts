@@ -9,7 +9,12 @@ import { BaseExternalProvider } from './ExternalProvider';
 import type { ExternalRequest, ExternalResponse } from '../../types/external';
 import type { StreamChunk, ProviderError, ProviderConfig } from './ProviderTypes';
 import { CredentialStore } from '../authentication/CredentialStore';
-import { ExternalProviderError } from '../../types/errors';
+import { 
+  ExternalProviderError, 
+  ProviderRateLimitError, 
+  ProviderInvalidKeyError, 
+  ProviderNetworkError 
+} from '../../types/errors';
 
 const ANTHROPIC_API_BASE = 'https://api.anthropic.com/v1';
 const ANTHROPIC_VERSION = '2023-06-01';
@@ -71,6 +76,14 @@ export class AnthropicProvider extends BaseExternalProvider {
       };
     } catch (error) {
       this.recordFailure();
+      // Re-throw specific provider errors so they can be handled upstream
+      if (
+        error instanceof ProviderRateLimitError ||
+        error instanceof ProviderInvalidKeyError ||
+        error instanceof ProviderNetworkError
+      ) {
+        throw error;
+      }
       return {
         taskId: request.taskId,
         status: 'failed',
@@ -109,6 +122,13 @@ export class AnthropicProvider extends BaseExternalProvider {
       });
 
       if (!response.ok) {
+        // Throw specific error types based on HTTP status
+        if (response.status === 429) {
+          throw new ProviderRateLimitError(this.id);
+        }
+        if (response.status === 401 || response.status === 403) {
+          throw new ProviderInvalidKeyError(this.id);
+        }
         const error = await this.mapError(response);
         throw new ExternalProviderError(error.message, this.id, error.retryable);
       }
@@ -152,6 +172,10 @@ export class AnthropicProvider extends BaseExternalProvider {
     } catch (error) {
       if ((error as Error).name === 'AbortError') {
         throw new ExternalProviderError('Request cancelled', this.id, false);
+      }
+      // Handle network errors (no response at all)
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new ProviderNetworkError(this.id);
       }
       throw error;
     }

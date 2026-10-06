@@ -165,3 +165,26 @@ export class AgentCommunicationError extends SaturdayError {
   }
 }
 
+// --- Provider-Specific Errors (Phase 4 Provider Integration) ---
+
+export class ProviderRateLimitError extends ExternalProviderError {
+  constructor(providerId: string) {
+    super(`Rate limit exceeded for ${providerId}`, providerId, true);
+    this.name = 'ProviderRateLimitError';
+  }
+}
+
+export class ProviderInvalidKeyError extends ExternalProviderError {
+  constructor(providerId: string) {
+    super(`Invalid API key for ${providerId}`, providerId, true);
+    this.name = 'ProviderInvalidKeyError';
+  }
+}
+
+export class ProviderNetworkError extends ExternalProviderError {
+  constructor(providerId: string) {
+    super(`Network error connecting to ${providerId}`, providerId, true);
+    this.name = 'ProviderNetworkError';
+  }
+}
+

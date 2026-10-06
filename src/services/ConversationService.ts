@@ -11,7 +11,17 @@ import { AIProviderRegistry } from '../core/ai/AIProviderRegistry';
 import { AIRouter } from '../core/routing/AIRouter';
 import { ContextService } from '../core/context/ContextService';
 import { PersonalityService } from './PersonalityService';
-import { AIProviderError, AIProviderUnavailableError, MalformedResponseError, RoutingError, SaturdayError } from '../core/types/errors';
+import { 
+  AIProviderError, 
+  AIProviderUnavailableError, 
+  MalformedResponseError, 
+  RoutingError, 
+  SaturdayError,
+  ExternalProviderError,
+  ProviderRateLimitError,
+  ProviderInvalidKeyError,
+  ProviderNetworkError,
+} from '../core/types/errors';
 import { TaskUnderstandingService } from '../core/routing/TaskUnderstandingService';
 import { ActionService } from './ActionService';
 import { ExternalService } from './ExternalService';
@@ -443,8 +453,29 @@ export class ConversationService {
         context,
       };
 
-      // 5. Generate response
-      const response: AIResponse = await provider.generate(request);
+      // 5. Generate response with fallback logic for external providers
+      let response: AIResponse;
+      try {
+        response = await provider.generate(request);
+      } catch (providerError) {
+        // Handle external provider failures with fallback to local
+        if (providerError instanceof ExternalProviderError && 
+            ['openai_provider', 'anthropic_provider', 'google_gemini_provider'].includes(providerId)) {
+          console.warn(`External provider ${providerId} failed, falling back to local provider:`, providerError);
+          
+          // Attempt fallback to local provider
+          const localProvider = this.registry.getProvider('local');
+          if (localProvider) {
+            console.log(`🔄 Falling back to local provider`);
+            response = await localProvider.generate(request);
+            providerId = 'local';
+          } else {
+            throw providerError; // No fallback available, re-throw
+          }
+        } else {
+          throw providerError; // Not an external provider error, re-throw
+        }
+      }
 
       if (!response.content || typeof response.content !== 'string') {
         throw new MalformedResponseError();
@@ -465,11 +496,16 @@ export class ConversationService {
       console.log(`📝 Response length: ${assistantContent.length} characters`);
       console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
     } catch (error) {
-      if (error instanceof SaturdayError) {
+      if (error instanceof ProviderRateLimitError) {
+        assistantContent = `Rate limit reached for ${error.providerId}. Please wait a moment and try again, or use local AI.`;
+      } else if (error instanceof ProviderInvalidKeyError) {
+        assistantContent = `API key for ${error.providerId} is invalid. Please reconfigure it in Settings > External AI Providers.`;
+      } else if (error instanceof ProviderNetworkError) {
+        assistantContent = `Network error connecting to ${error.providerId}. Check your connection or use local AI.`;
+      } else if (error instanceof SaturdayError) {
         assistantContent = this.getErrorMessage(error);
       } else {
-        assistantContent =
-          'Something went wrong. Please try again.';
+        assistantContent = 'Something went wrong. Please try again.';
       }
     }
 
