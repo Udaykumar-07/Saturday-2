@@ -37,6 +37,7 @@ import {
 import { MemoryService } from './MemoryService';
 import { PersonalityService } from './PersonalityService';
 import { ConversationService } from './ConversationService';
+import { ConversationServiceReflexion } from './ConversationServiceReflexion';
 import { AIService } from './AIService';
 import { ActionService } from './ActionService';
 import { LocalAIService } from './LocalAIService';
@@ -199,10 +200,18 @@ export class ServiceContainer {
     this.aiRegistry.register(this.localProvider.getQwenProvider());
     this.aiRegistry.register(this.mockProvider);
 
-    // 4. Routing
-    this.router = new AIRouter(this.aiRegistry);
+    // 4. Data Boundary (for privacy-aware routing)
+    this.dataBoundary = new DataBoundaryManager();
 
-    // 5. Context Providers
+    // 5. Routing - with privacy awareness
+    const privacyPolicy = this.dataBoundary.getPolicy();
+    this.router = new AIRouter(
+      this.aiRegistry,
+      privacyPolicy.allowExternalAI,
+      privacyPolicy.strictLocalOnly
+    );
+
+    // 6. Context Providers
     this.contextService = new ContextService();
     this.contextService.registerProvider(new MemoryContextProvider(this.memoryService));
     this.contextService.registerProvider(new DeviceContextProvider());
@@ -222,9 +231,22 @@ export class ServiceContainer {
     this.openAIProvider = new OpenAIProvider(this.credentialStore);
     this.anthropicProvider = new AnthropicProvider(this.credentialStore);
     this.googleGeminiProvider = new GoogleGeminiProvider(this.credentialStore);
+    
+    // Register with external registry (for Phase 3)
     this.externalRegistry.register(this.openAIProvider);
     this.externalRegistry.register(this.anthropicProvider);
     this.externalRegistry.register(this.googleGeminiProvider);
+    
+    // ALSO register with AI registry using adapters (so router can use them!)
+    // External providers use execute() method, but AIProvider interface expects generate()
+    // ExternalProviderAdapter bridges the two interfaces
+    const { ExternalProviderAdapter } = require('../core/ai/ExternalProviderAdapter');
+    this.aiRegistry.register(new ExternalProviderAdapter(this.openAIProvider));
+    this.aiRegistry.register(new ExternalProviderAdapter(this.anthropicProvider));
+    this.aiRegistry.register(new ExternalProviderAdapter(this.googleGeminiProvider));
+    
+    console.log('✅ Registered external AI providers with router (via adapters)');
+    
     this.agentRegistry = new AgentRegistry();
     this.agentClient = new AgentClient();
     this.agentLayer = new AgentCommunicationLayer(
@@ -232,7 +254,7 @@ export class ServiceContainer {
       this.agentClient,
       this.authManager
     );
-    this.dataBoundary = new DataBoundaryManager();
+    // dataBoundary already created earlier for router privacy settings
     this.verifier = new ExternalResultVerifier();
     this.healthTracker = new ProviderHealthTracker();
     this.requirementsAnalyzer = new TaskRequirementsAnalyzer();
@@ -353,16 +375,13 @@ export class ServiceContainer {
       }
     }).catch(() => {});
 
-    // 9. Orchestration Services
-    this.conversationService = new ConversationService(
+    // 9. Orchestration Services with Reflexion
+    this.conversationService = new ConversationServiceReflexion(
       this.conversationRepo,
       this.aiRegistry,
       this.router,
       this.contextService,
       this.personalityService,
-      this.taskUnderstanding,
-      this.actionService,
-      this.externalService,
       this.memoryService
     );
 

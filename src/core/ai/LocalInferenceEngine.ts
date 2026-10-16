@@ -342,7 +342,23 @@ export class LocalInferenceEngine {
     }
 
     if (context?.currentTime) {
-      systemContent += `\nCurrent local time: ${context.currentTime}`;
+      const date = new Date(context.currentTime);
+      const dateStr = date.toLocaleDateString('en-US', { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+      });
+      const timeStr = date.toLocaleTimeString('en-US', { 
+        hour: '2-digit', 
+        minute: '2-digit',
+        hour12: true
+      });
+      systemContent += `\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+      systemContent += `\nCURRENT DATE & TIME:`;
+      systemContent += `\nDate: ${dateStr}`;
+      systemContent += `\nTime: ${timeStr}`;
+      systemContent += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
     }
 
     result.push({ role: 'system', content: systemContent });

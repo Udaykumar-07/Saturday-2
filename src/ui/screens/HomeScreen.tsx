@@ -60,6 +60,7 @@ export const HomeScreen: React.FC = () => {
     reason: string;
     cost: string;
   } | null>(null);
+  const [editingMessage, setEditingMessage] = useState<{ id: string; content: string } | null>(null);
 
   const flatListRef = useRef<FlatList>(null);
 
@@ -95,6 +96,25 @@ export const HomeScreen: React.FC = () => {
 
   const messages = conversation?.messages || [];
   const hasMessages = messages.length > 0;
+
+  const handleEditMessage = (messageId: string, content: string) => {
+    setEditingMessage({ id: messageId, content });
+  };
+
+  const handleSendOrEdit = (text: string) => {
+    if (editingMessage) {
+      // For now, editing will just send a new message with the edited content
+      // TODO: Implement proper message editing in conversation service
+      sendMessage(`[Edited] ${text}`);
+      setEditingMessage(null);
+    } else {
+      sendMessage(text);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingMessage(null);
+  };
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -133,6 +153,7 @@ export const HomeScreen: React.FC = () => {
                     await connectService(sId);
                     await sendMessage('Show my latest emails');
                   }}
+                  onEditMessage={handleEditMessage}
                 />
               )}
               contentContainerStyle={styles.messagesList}
@@ -145,8 +166,11 @@ export const HomeScreen: React.FC = () => {
 
         {/* Chat Input */}
         <ChatInput
-          onSend={(text) => sendMessage(text)}
+          onSend={handleSendOrEdit}
           isSending={isSending}
+          initialValue={editingMessage?.content}
+          placeholder={editingMessage ? 'Edit your message...' : 'What do you want to get done?'}
+          onCancelEdit={editingMessage ? handleCancelEdit : undefined}
         />
 
         {/* Conversation History Drawer */}

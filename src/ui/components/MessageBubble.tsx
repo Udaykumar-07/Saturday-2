@@ -3,8 +3,9 @@
  * Minimalist design distinguishing user vs assistant with subtle typography.
  */
 
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { Message } from '../../core/types/conversation';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
@@ -15,10 +16,24 @@ import { AuthPrompt } from './AuthPrompt';
 interface MessageBubbleProps {
   message: Message;
   onAuthenticate?: (serviceId: string) => Promise<void>;
+  onEditMessage?: (messageId: string, content: string) => void;
 }
 
-export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onAuthenticate }) => {
+export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onAuthenticate, onEditMessage }) => {
   const isUser = message.role === 'user';
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    await Clipboard.setStringAsync(message.content);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleEdit = () => {
+    if (onEditMessage) {
+      onEditMessage(message.id, message.content);
+    }
+  };
 
   if (isUser) {
     return (
@@ -26,9 +41,21 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onAuthent
         <View style={styles.userBubble}>
           <Text style={styles.userContent}>{message.content}</Text>
         </View>
-        <Text style={styles.userTimestamp}>
-          {formatTimeOnly(message.timestamp)}
-        </Text>
+        <View style={styles.messageActions}>
+          <Text style={styles.userTimestamp}>
+            {formatTimeOnly(message.timestamp)}
+          </Text>
+          <View style={styles.actionButtons}>
+            <TouchableOpacity onPress={handleCopy} style={styles.actionButton}>
+              <Text style={styles.actionButtonText}>{copied ? '✓ Copied' : 'Copy'}</Text>
+            </TouchableOpacity>
+            {onEditMessage && (
+              <TouchableOpacity onPress={handleEdit} style={styles.actionButton}>
+                <Text style={styles.actionButtonText}>Edit</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
       </View>
     );
   }
@@ -51,9 +78,18 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onAuthent
         )}
       </View>
 
-      <Text style={styles.assistantTimestamp}>
-        {formatTimeOnly(message.timestamp)}
-      </Text>
+      <View style={styles.messageActions}>
+        <Text style={styles.assistantTimestamp}>
+          {formatTimeOnly(message.timestamp)}
+        </Text>
+        <View style={styles.actionButtons}>
+          <TouchableOpacity onPress={handleCopy} style={styles.actionButton}>
+            <Text style={[styles.actionButtonText, styles.assistantActionText]}>
+              {copied ? '✓ Copied' : 'Copy'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
     </View>
   );
 };
@@ -130,5 +166,34 @@ const styles = StyleSheet.create({
     color: colors.textTertiary,
     marginTop: 6,
     marginLeft: 2,
+  },
+  messageActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 4,
+    width: '100%',
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  actionButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  actionButtonText: {
+    ...typography.caption,
+    fontSize: 11,
+    color: colors.textSecondary,
+    fontWeight: '500',
+  },
+  assistantActionText: {
+    color: colors.textTertiary,
   },
 });

@@ -280,26 +280,34 @@ export class QwenModelRuntime {
       
       if (this.modelId.includes('gemma')) {
         stopSequences = ['<end_of_turn>', '<start_of_turn>', 'model\n', '\nmodel', '</s>', '<eos>'];
-        repeatPenalty = 1.5; // Higher penalty to prevent repetition
-        maxTokens = 150; // Shorter responses to prevent loops
+        repeatPenalty = 1.8; // Much higher to prevent loops
+        maxTokens = 100; // Shorter to stop loops faster
       } else if (this.modelId.includes('phi')) {
         stopSequences = ['<|end|>', '<|system|>', '<|user|>', '<|assistant|>'];
-        repeatPenalty = 1.4;
+        repeatPenalty = 1.6;
+        maxTokens = 150;
       } else if (this.modelId.includes('tinyllama')) {
         stopSequences = ['<|im_end|>', '<|im_start|>'];
-        repeatPenalty = 1.4;
+        repeatPenalty = 1.6;
+        maxTokens = 150;
       } else if (this.modelId.includes('mistral')) {
         stopSequences = ['</s>', '[INST]', '[/INST]'];
-        repeatPenalty = 1.3;
+        repeatPenalty = 1.5;
+        maxTokens = 200;
+      } else {
+        // Qwen and default
+        repeatPenalty = 1.6; // Increased from 1.3
+        maxTokens = 150; // Reduced from 256
       }
       
       console.log(`⚙️  Stop sequences: ${stopSequences.join(', ')}`);
       console.log(`⚙️  Repeat penalty: ${repeatPenalty}`);
+      console.log(`⚙️  Max tokens: ${maxTokens}`);
       
       const result = await this.inferenceEngine.infer(prompt, {
         maxTokens: options.maxTokens || maxTokens,
-        temperature: options.temperature || 0.7, // Lower temperature for more focused responses
-        topP: options.topP || 0.9, // Lower topP for less randomness
+        temperature: options.temperature || 0.7,
+        topP: options.topP || 0.9,
         topK: options.topK || 40,
         repeatPenalty: options.repeatPenalty || repeatPenalty,
         stopSequences: stopSequences,
@@ -337,8 +345,39 @@ export class QwenModelRuntime {
         cleanedText = cleanedText.split(token).join('');
       }
       
-      // Clean up extra whitespace only
+      // Clean up extra whitespace
       cleanedText = cleanedText.replace(/\s+/g, ' ').trim();
+      
+      // AGGRESSIVE repetition detection and truncation
+      // Check for repeated phrases (10+ chars repeated 2+ times)
+      const phraseRepetitionPattern = /(.{10,}?)(\s*\1){2,}/gi;
+      if (phraseRepetitionPattern.test(cleanedText)) {
+        console.log('⚠️  Detected phrase repetition, extracting first occurrence only');
+        cleanedText = cleanedText.replace(phraseRepetitionPattern, '$1');
+      }
+      
+      // Check for sentence-level repetition
+      const sentences = cleanedText.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 10);
+      const uniqueSentences: string[] = [];
+      const seenSentences = new Set<string>();
+      
+      for (const sentence of sentences) {
+        const normalized = sentence.toLowerCase().replace(/\s+/g, ' ').trim();
+        if (!seenSentences.has(normalized)) {
+          seenSentences.add(normalized);
+          uniqueSentences.push(sentence);
+        } else {
+          console.log('⚠️  Detected repeated sentence, truncating');
+          break; // Stop at first repetition
+        }
+      }
+      
+      if (uniqueSentences.length < sentences.length) {
+        cleanedText = uniqueSentences.join('. ');
+        if (cleanedText && !cleanedText.match(/[.!?]$/)) {
+          cleanedText += '.';
+        }
+      }
 
       console.log(`📝 Cleaned response (${cleanedText.length} chars): "${cleanedText}"`);
       console.log(`📝 Character comparison:`);

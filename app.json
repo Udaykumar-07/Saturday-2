@@ -23,14 +23,16 @@
       "expo-secure-store"
     ],
     "autolinking": {
-      "exclude": ["expo-camera"]
+      "exclude": [
+        "expo-camera"
+      ]
     },
     "extra": {
       "router": {
         "origin": false
       },
       "eas": {
-        "projectId": ""
+        "projectId": "3e864573-7fe9-47fe-a72e-1270c289b268"
       }
     }
   }

@@ -417,7 +417,7 @@ export class ConversationService {
         throw new AIProviderUnavailableError();
       }
 
-      const routingDecision = await this.router.route();
+      const routingDecision = await this.router.route({ userInput: content });
       providerId = routingDecision.providerId;
 
       // Check if provider requires configuration (Phase 4 intelligence routing)

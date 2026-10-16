@@ -8,7 +8,7 @@
  * - Privacy settings: Local AI preference, external model and agent permissions
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -21,6 +21,7 @@ import {
   ActivityIndicator,
   Linking,
 } from 'react-native';
+// import { Picker } from '@react-native-picker/picker'; // Temporarily disabled for testing
 import { colors } from '../theme/colors';
 import { IntegrationCard } from '../components/IntegrationCard';
 import { LayaAISettingsSection } from '../components/LayaAISettingsSection';
@@ -59,6 +60,9 @@ export const IntegrationsScreen: React.FC<IntegrationsScreenProps> = ({
     connectProvider,
     disconnectProvider,
     testConnection,
+    fetchAvailableModels,
+    switchModel,
+    getCurrentModel,
     loading: externalLoading,
     error: externalError,
   } = useExternalProviders();
@@ -68,8 +72,30 @@ export const IntegrationsScreen: React.FC<IntegrationsScreenProps> = ({
   const [showModelManagement, setShowModelManagement] = useState(false);
   const [configModalVisible, setConfigModalVisible] = useState<string | null>(null);
   const [apiKeyInput, setApiKeyInput] = useState('');
+  const [selectedModel, setSelectedModel] = useState<string>('');
+  const [availableModels, setAvailableModels] = useState<Array<{ name: string; displayName: string; description: string }>>([]);
+  const [fetchingModels, setFetchingModels] = useState(false);
   const [testConnectionResult, setTestConnectionResult] = useState<{ success: boolean; message: string } | null>(null);
   const [isTesting, setIsTesting] = useState(false);
+  const [currentModels, setCurrentModels] = useState<Record<string, string>>({});
+  const [showModelSwitcher, setShowModelSwitcher] = useState<string | null>(null);
+
+  // Load current model selections when providers change
+  useEffect(() => {
+    const loadCurrentModels = async () => {
+      const models: Record<string, string> = {};
+      for (const provider of externalProviders) {
+        if (provider.connected) {
+          const currentModel = await getCurrentModel(provider.id);
+          if (currentModel) {
+            models[provider.id] = currentModel;
+          }
+        }
+      }
+      setCurrentModels(models);
+    };
+    loadCurrentModels();
+  }, [externalProviders]);
 
   return (
     <>
@@ -222,7 +248,11 @@ export const IntegrationsScreen: React.FC<IntegrationsScreenProps> = ({
                 <View style={styles.providerHeader}>
                   <View style={styles.providerInfo}>
                     <Text style={styles.providerName}>{provider.name}</Text>
-                    <Text style={styles.providerModels}>{provider.models.join(', ')}</Text>
+                    <Text style={styles.providerModels}>
+                      {provider.connected && currentModels[provider.id] 
+                        ? `Current: ${currentModels[provider.id]}`
+                        : provider.models.join(', ')}
+                    </Text>
                   </View>
                   <View style={[
                     styles.statusBadge,
@@ -240,21 +270,64 @@ export const IntegrationsScreen: React.FC<IntegrationsScreenProps> = ({
                 </View>
 
                 {provider.connected ? (
-                  <TouchableOpacity
-                    style={styles.disconnectButton}
-                    onPress={async () => {
-                      await disconnectProvider(provider.id);
-                    }}
-                    disabled={externalLoading}
-                  >
-                    <Text style={styles.disconnectButtonText}>Disconnect</Text>
-                  </TouchableOpacity>
+                  <>
+                    {/* Show available models dropdown */}
+                    {provider.models.length > 1 && (
+                      <View style={styles.modelSwitcherContainer}>
+                        <Text style={styles.modelSwitcherLabel}>Available Models:</Text>
+                        <View style={styles.modelButtonsContainer}>
+                          {provider.models.map((model) => (
+                            <TouchableOpacity
+                              key={model}
+                              style={[
+                                styles.modelButton,
+                                currentModels[provider.id] === model && styles.modelButtonSelected,
+                              ]}
+                              onPress={async () => {
+                                // Get technical name from modelMap, fallback to display name
+                                const technicalName = provider.modelMap?.[model] || model;
+                                const success = await switchModel(provider.id, technicalName);
+                                if (success) {
+                                  setCurrentModels(prev => ({
+                                    ...prev,
+                                    [provider.id]: model, // Store display name for UI
+                                  }));
+                                }
+                              }}
+                            >
+                              <Text style={[
+                                styles.modelButtonText,
+                                currentModels[provider.id] === model && styles.modelButtonTextSelected,
+                              ]}>
+                                {model}
+                              </Text>
+                              {currentModels[provider.id] === model && (
+                                <Text style={styles.modelButtonCheck}>✓</Text>
+                              )}
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      </View>
+                    )}
+                    
+                    <TouchableOpacity
+                      style={styles.disconnectButton}
+                      onPress={async () => {
+                        await disconnectProvider(provider.id);
+                      }}
+                      disabled={externalLoading}
+                    >
+                      <Text style={styles.disconnectButtonText}>Disconnect</Text>
+                    </TouchableOpacity>
+                  </>
                 ) : (
                   <TouchableOpacity
                     style={styles.connectButton}
                     onPress={() => {
                       setConfigModalVisible(provider.id);
                       setApiKeyInput('');
+                      setSelectedModel('');
+                      setAvailableModels([]);
                       setTestConnectionResult(null);
                     }}
                     disabled={externalLoading}
@@ -374,7 +447,6 @@ export const IntegrationsScreen: React.FC<IntegrationsScreenProps> = ({
             key={provider.id}
             visible={configModalVisible === provider.id}
             animationType="slide"
-            presentationStyle="pageSheet"
             transparent={true}
           >
             <View style={styles.modalOverlay}>
@@ -385,6 +457,8 @@ export const IntegrationsScreen: React.FC<IntegrationsScreenProps> = ({
                     onPress={() => {
                       setConfigModalVisible(null);
                       setApiKeyInput('');
+                      setSelectedModel('');
+                      setAvailableModels([]);
                       setTestConnectionResult(null);
                     }}
                     style={styles.closeButton}
@@ -418,6 +492,100 @@ export const IntegrationsScreen: React.FC<IntegrationsScreenProps> = ({
                       Get your API key from {provider.name} →
                     </Text>
                   </TouchableOpacity>
+
+                  {/* Fetch Models Button (only for Gemini) */}
+                  {provider.id === 'google_gemini_provider' && (
+                    <>
+                      <TouchableOpacity
+                        style={[styles.fetchModelsButton, fetchingModels && styles.buttonDisabled]}
+                        onPress={async () => {
+                          if (!apiKeyInput.trim()) {
+                            setTestConnectionResult({
+                              success: false,
+                              message: 'Please enter an API key first',
+                            });
+                            return;
+                          }
+                          setFetchingModels(true);
+                          setTestConnectionResult(null);
+                          try {
+                            const models = await fetchAvailableModels(provider.id, apiKeyInput);
+                            setAvailableModels(models);
+                            if (models.length > 0) {
+                              setSelectedModel(models[0].name); // Default to first model
+                              setTestConnectionResult({
+                                success: true,
+                                message: `✓ Found ${models.length} available models`,
+                              });
+                            } else {
+                              setTestConnectionResult({
+                                success: false,
+                                message: '✗ No models found. Check your API key.',
+                              });
+                            }
+                          } catch (err) {
+                            setTestConnectionResult({
+                              success: false,
+                              message: '✗ Failed to fetch models: ' + (err instanceof Error ? err.message : String(err)),
+                            });
+                          } finally {
+                            setFetchingModels(false);
+                          }
+                        }}
+                        disabled={fetchingModels}
+                      >
+                        {fetchingModels ? (
+                          <ActivityIndicator color={colors.accent} size="small" />
+                        ) : (
+                          <Text style={styles.fetchModelsButtonText}>📋 Fetch Available Models</Text>
+                        )}
+                      </TouchableOpacity>
+
+                      {/* Model Selection Picker */}
+                      {availableModels.length > 0 && (
+                        <View style={styles.modelSelectionContainer}>
+                          <Text style={styles.configLabel}>Select Model</Text>
+                          <View style={styles.modelPickerContainer}>
+                            {availableModels.map((model) => (
+                              <TouchableOpacity
+                                key={model.name}
+                                style={[
+                                  styles.modelOption,
+                                  selectedModel === model.name && styles.modelOptionSelected,
+                                ]}
+                                onPress={() => setSelectedModel(model.name)}
+                              >
+                                <View style={styles.modelOptionHeader}>
+                                  <Text style={[
+                                    styles.modelOptionName,
+                                    selectedModel === model.name && styles.modelOptionNameSelected,
+                                  ]}>
+                                    {model.displayName}
+                                  </Text>
+                                  <View
+                                    style={[
+                                      styles.modelRadio,
+                                      selectedModel === model.name && styles.modelRadioSelected,
+                                    ]}
+                                  >
+                                    {selectedModel === model.name && (
+                                      <View style={styles.modelRadioInner} />
+                                    )}
+                                  </View>
+                                </View>
+                                {model.description && (
+                                  <Text style={styles.modelOptionDescription}>
+                                    {model.description}
+                                  </Text>
+                                )}
+                                <Text style={styles.modelOptionId}>ID: {model.name}</Text>
+                              </TouchableOpacity>
+                            ))}
+                          </View>
+                        </View>
+                      )}
+                    </>
+                  )}
 
                   <View style={styles.privacyNotice}>
                     <Text style={styles.privacyNoticeText}>
@@ -488,10 +656,22 @@ export const IntegrationsScreen: React.FC<IntegrationsScreenProps> = ({
                           });
                           return;
                         }
-                        const success = await connectProvider(provider.id, apiKeyInput);
+                        
+                        // For Gemini, require model selection
+                        if (provider.id === 'google_gemini_provider' && availableModels.length > 0 && !selectedModel) {
+                          setTestConnectionResult({
+                            success: false,
+                            message: 'Please select a model',
+                          });
+                          return;
+                        }
+                        
+                        const success = await connectProvider(provider.id, apiKeyInput, selectedModel);
                         if (success) {
                           setConfigModalVisible(null);
                           setApiKeyInput('');
+                          setSelectedModel('');
+                          setAvailableModels([]);
                           setTestConnectionResult(null);
                         }
                       }}
@@ -885,7 +1065,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: '80%',
+    minHeight: '60%',                          // Ensure sufficient height
+    maxHeight: '85%',                          // Increased from 80%
   },
   configModalHeader: {
     flexDirection: 'row',
@@ -916,15 +1097,16 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   apiKeyInput: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.surfaceBorder,
+    backgroundColor: colors.surfaceHover,    // Slightly lighter for visibility
+    borderWidth: 2,                           // Thicker border for visibility
+    borderColor: colors.accent,               // Accent color border
     borderRadius: 10,
     paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 14,
-    color: colors.textPrimary,
+    paddingVertical: 14,                      // More padding
+    fontSize: 15,                             // Larger font
+    color: colors.textPrimary,                // White text
     marginBottom: 12,
+    minHeight: 50,                            // Ensure minimum height
   },
   docsLink: {
     fontSize: 13,
@@ -985,5 +1167,123 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: {
     opacity: 0.5,
+  },
+  fetchModelsButton: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  fetchModelsButtonText: {
+    color: colors.accent,
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  modelSelectionContainer: {
+    marginBottom: 16,
+  },
+  modelPickerContainer: {
+    gap: 10,
+  },
+  modelOption: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.surfaceBorder,
+    borderRadius: 10,
+    padding: 12,
+  },
+  modelOptionSelected: {
+    borderColor: colors.accent,
+    backgroundColor: 'rgba(59, 130, 246, 0.08)',
+  },
+  modelOptionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  modelOptionName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textPrimary,
+    flex: 1,
+  },
+  modelOptionNameSelected: {
+    color: colors.accent,
+  },
+  modelOptionDescription: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    lineHeight: 16,
+    marginBottom: 4,
+  },
+  modelOptionId: {
+    fontSize: 11,
+    color: colors.textTertiary,
+    fontFamily: 'monospace',
+  },
+  modelRadio: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    borderColor: colors.textTertiary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
+  },
+  modelRadioSelected: {
+    borderColor: colors.accent,
+  },
+  modelRadioInner: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: colors.accent,
+  },
+  modelSwitcherContainer: {
+    marginBottom: 12,
+  },
+  modelSwitcherLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    marginBottom: 6,
+  },
+  modelButtonsContainer: {
+    gap: 8,
+  },
+  modelButton: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.surfaceBorder,
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  modelButtonSelected: {
+    borderColor: colors.accent,
+    backgroundColor: 'rgba(59, 130, 246, 0.08)',
+  },
+  modelButtonText: {
+    fontSize: 14,
+    color: colors.textPrimary,
+    fontWeight: '500',
+  },
+  modelButtonTextSelected: {
+    color: colors.accent,
+    fontWeight: '600',
+  },
+  modelButtonCheck: {
+    fontSize: 16,
+    color: colors.accent,
+    fontWeight: 'bold',
   },
 });
